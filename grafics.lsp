@@ -10,3 +10,5 @@
 (defun pinta ()
     "Pinta l'estat de la partida en un torn segons l'estat passat per paràmetre."
     42)
+    
+    ;;tst
