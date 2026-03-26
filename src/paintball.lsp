@@ -15,19 +15,62 @@
 ; (load 'agent-abc123)
 ; (load 'agent-xyz999)
 
+; ******************** utilities ********************
 
-;; Documentació d'això...
-(defun inici ()
-    "Punt d'entrada del programa."
-    (color 0 0 0 255 255 255) ; Compatibilitat Windows-Unix: fons blanc, línies i text negres.
-    (mode 0 0 640 375)        ; Compatibilitat Windows-Unix: configura la finestra de joc per a Unix segons la de Windows.
-    (move 300 167)            ; Pintam un quadrat enmig de la finestra.
-    (quadrat 20)
-    t)
+(defun list-set (l n v)
+    (append (subseq l 0 n) (list v) (subseq l (1+ n))))
 
-;; Documentació d'això...
-(defun quadrat (mida)
-    (drawrel 0 mida)
-    (drawrel mida 0)
-    (drawrel 0 (- mida))
-    (drawrel (- mida) 0))
+(defun sum (l)
+    "Calcula la suma de tots els elements de la llista"
+    ; TODO: add recursive sum (lists of lists)
+    (reduce '+ l))
+
+(defun filter (f l)
+    "Crea una nova llista amb els elements de l que compleixen la condició definida per la funció f"
+    (cond ((null l) nil)
+          ((funcall f (car l)) (cons (car l) (filter f (cdr l))))
+          (t (filter f (cdr l)))))
+
+(defun dist (x1 y1 x2 y2)
+    "Calcula la distància Euclidiana al quadrat entre (x1, y1) i (x2, y2)"
+    (+ (* (- x1 x2) (- x1 x2)) (* (- y1 y2) (- y1 y2))))
+
+; **************************************************
+; MAPA
+; **************************************************
+
+(defun map-load (name)
+    (let* ((fp (open (format nil "maps/~a.map" name) :direction :input))
+           (m (read fp nil nil)))
+        (close fp)
+        m))
+
+(defun map-height (m) (length m))
+(defun map-width (m) (length (car m)))
+
+; **************************************************
+; CELLS
+; **************************************************
+
+#|
+    Cell structure
+        Aigua: (AIGUA)
+        Terra: (TERRA COLOR)
+          Lab: (TERRA COLOR LAB   EQUIP)
+         Base: (TERRA COLOR BASE  EQUIP COLORS-PINTAT)
+        Bolla: (TERRA COLOR BOLLA EQUIP COLORS-PINTAT COLOR-PROPI TR-PINTAR TR-MOURE)
+|#
+
+; cell accessor functions
+(defun cell-get (m x y) (and (>= x 0) (>= y 0) (nth x (nth y m))))
+(defun cell-set (m x y cell) (list-set m y (list-set (nth y m) x cell)))
+(defun cell-type (cell) (car cell))
+(defun cell-type-water (cell) (eq (cell-type cell) 'aigua))
+(defun cell-type-land (cell) (eq (cell-type cell) 'terra))
+(defun cell-color (cell) (cadr cell))
+(defun cell-element (cell) (caddr cell))
+(defun cell-element-team (cell) (cadddr cell))
+(defun cell-element-color (cell) (nth 4 cell))
+(defun cell-ball-color (cell) (nth 5 cell))
+(defun cell-ball-tr-paint (cell) (nth 6 cell))
+(defun cell-ball-tr-move (cell) (nth 7 cell))
