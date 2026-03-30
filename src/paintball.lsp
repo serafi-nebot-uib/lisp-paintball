@@ -30,6 +30,8 @@
 (defconstant BASE             'base)
 (defconstant BALL             'bolla)
 (defconstant UNIT-TYPES       (list BASE BALL))
+(defconstant VISION-BASE      64)
+(defconstant VISION-BALL      20)
 
 ; **************************************************
 ; UTILITIES
@@ -57,7 +59,7 @@
     "Calcula la distància Euclidiana al quadrat entre (x1, y1) i (x2, y2)"
     (+ (* (- x1 x2) (- x1 x2)) (* (- y1 y2) (- y1 y2))))
 
-(defun applyarg (x fns) (mapcar (lambda (f) (funcall f x)) fns))
+(defun mapfun (x fns) (mapcar (lambda (f) (funcall f x)) fns))
 
 (defun bool->int (lst) (mapcar (lambda (x) (if x 1 0)) lst))
 
@@ -116,7 +118,7 @@
 (defun cell-ball-tr-decrease (cell team)
     "Decrementa el cooldown de la cel·la cell si hi ha una bolla de l'equip team"
     (cond ((and (cell-has-ball cell) (eq (cell-element-team cell) team))
-           (append (applyarg cell '(cell-type cell-color cell-element cell-element-team cell-element-color cell-ball-color))
+           (append (mapfun cell '(cell-type cell-color cell-element cell-element-team cell-element-color cell-ball-color))
                    (list (max 0 (- (cell-ball-tr-paint cell) 1)) (max 0 (- (cell-ball-tr-move cell) 1)))))
           (t cell)))
 
@@ -131,23 +133,53 @@
 ; UNITS
 ; **************************************************
 
-(defun find-units (m team)
+(defun unit-find (m team)
     "Retorna les posicions (x y) de les unitats de l'equip team."
-    (find-units-rows m team 0))
+    (unit-find-rows m team 0))
 
-(defun find-units-rows (m team y)
+(defun unit-find-rows (m team y)
     "Cerca unitats de l'equip team per files."
     (cond ((null m) nil)
-          (t (append (find-units-cols (car m) team 0 y)
-                     (find-units-rows (cdr m) team (1+ y))))))
+          (t (append (unit-find-cols (car m) team 0 y)
+                     (unit-find-rows (cdr m) team (1+ y))))))
 
-(defun find-units-cols (row team x y)
+(defun unit-find-cols (row team x y)
     "Cerca unitats de l'equip team per columnes dins una fila."
     (cond ((null row) nil)
           ((and (member (cell-element (car row)) UNIT-TYPES)
                 (eq (cell-element-team (car row)) team))
-           (cons (list x y) (find-units-cols (cdr row) team (1+ x) y)))
-          (t (find-units-cols (cdr row) team (1+ x) y))))
+           (cons (list x y) (unit-find-cols (cdr row) team (1+ x) y)))
+          (t (unit-find-cols (cdr row) team (1+ x) y))))
+
+(defun unit-info (state team x y cell)
+    "Construeix la llista d'informacio que s'envia a l'agent per una unitat.
+     Format: (torn equip pintura tipus posicio colors-pintat color-bolla
+              tr-pintar tr-moure visio memoria)."
+    (let* ((turn (state-turn state))
+           (m (state-map state))
+           (paint (state-paint-get state team))
+           (dx (state-dx state))
+           (dy (state-dy state))
+           (elem (cell-element cell))
+           (pos (list (+ x dx) (+ y dy)))
+           (elem-color (cell-element-color cell))
+           (ball-color (cell-ball-color cell))
+           (tr-paint (cell-ball-tr-paint cell))
+           (tr-move (cell-ball-tr-move cell))
+           (vision-range (if (eq elem BASE) VISION-BASE VISION-BALL))
+           (vision (compute-vision m x y vision-range dx dy))
+           (memory nil))
+        (list turn team paint elem pos elem-color ball-color tr-paint tr-move vision memory)))
+
+(defun vision (m cx cy range)
+    (let* ((off (truncate (sqrt (float range))))
+           (w (map-width m))
+           (h (map-height m))
+           (min-x (max 0 (- cx off)))
+           (min-y (max 0 (- cy off)))
+           (max-x (min (- w 1) (+ cx off)))
+           (max-y (min (- h 1) (+ cy off)))
+    )))
 
 ; **************************************************
 ; GAME STATE
@@ -171,12 +203,11 @@
 
 (defun game-paint-increase (s team)
     "Incrementa la quantitat de pintura que li pertoca per al torn actual a l'equip team"
-    (let* (
-        (m (state-map s))
-        (labs (map-count m (cell-check-lab-team team)))
-        (inc (+ PAINT-INC-TURN (* PAINT-INC-LAB labs)))
-        (curr (state-paint-get s team)))
-    (state-paint-set s team (+ curr inc))))
+    (let* ((m (state-map s))
+           (labs (map-count m (cell-check-lab-team team)))
+           (inc (+ PAINT-INC-TURN (* PAINT-INC-LAB labs)))
+           (curr (state-paint-get s team)))
+          (state-paint-set s team (+ curr inc))))
 
 (defun game-tr-decrease (s team)
     "Decrementa el cooldown de totes les cel·les del mapa que contenen una bolla del l'equip team"
@@ -190,16 +221,16 @@
            ; 2. decrement cooldowns
            (s2 (game-tr-decrease s1 team))
            ; 3. process all units
+           (s3 (units-find (state-map s2) team))
         )
         ; 4. increase turn
-        (list-set s2 0 (1+ turn))))
+        (list-set s3 0 (1+ turn))))
 
 (defun game-loop (s)
     (let* ((n1 (game-paint-increase s TEAM-1))
             (n2 (game-paint-increase s TEAM-2)))
         (print (state-paint-get n1 TEAM-1))
-        (print (state-paint-get n2 TEAM-2))
-    ))
+        (print (state-paint-get n2 TEAM-2))))
 
 (defun paintball (map-name)
     (let* ((m (map-load map-name))
