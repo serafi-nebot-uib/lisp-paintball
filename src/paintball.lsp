@@ -32,6 +32,9 @@
 (defconstant UNIT-TYPES       (list BASE BALL))
 (defconstant VISION-BASE      64)
 (defconstant VISION-BALL      20)
+(defconstant R                'r)
+(defconstant G                'g)
+(defconstant B                'b)
 
 ; **************************************************
 ; UTILITIES
