@@ -34,7 +34,7 @@ comment = re.compile(r";.*$")
 string  = re.compile(r"\"[^\"]*\"")
 
 errors = []
-for path in Path(".").glob("src/**/*.lsp"):
+for path in Path(".").glob("../src/**/*.lsp"):
   for i, raw in enumerate(path.read_text().splitlines(), 1):
     line = string.sub("\"\"", comment.sub("", raw))  # strip comments & strings
     for m in pattern.finditer(line): errors.append(f"{path}:{i}: '{m.group()}' → {raw.strip()}")
