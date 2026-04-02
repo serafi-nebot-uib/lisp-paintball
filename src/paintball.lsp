@@ -32,9 +32,9 @@
 (defconstant UNIT-TYPES       (list BASE BALL))
 (defconstant VISION-BASE      64)
 (defconstant VISION-BALL      20)
-(defconstant R                'r)
-(defconstant G                'g)
-(defconstant B                'b)
+(defconstant RGB-R                'r)
+(defconstant RGB-G                'g)
+(defconstant RGB-B                'b)
 
 ; **************************************************
 ; UTILITIES
@@ -48,7 +48,20 @@
           ((atom lst) (list lst))
           (t (append (flatten (car lst)) (flatten (cdr lst))))))
 
-(defun sum (lst) (reduce '+ (flatten lst)))
+(defun range (s e) (if (> s e) nil (cons s (range (1+ s) e))))
+(defun add (a b) (mapcar '+ a b))
+(defun sub (a b) (mapcar '- a b))
+(defun div (a b) (mapcar '/ a b))
+(defun mul (a b) (mapcar '* a b))
+(defun sum  (a) (reduce '+ (flatten a)))
+(defun prod (a) (reduce '* (flatten a)))
+(defun pow (a e) (mapcar (lambda (x) (expt x e)) a))
+(defun dist (a b) (sum (pow (sub a b) 2)))
+(defun cartesian (l1 l2)
+    (if (null l1)
+        nil
+        (append (mapcar (lambda (x) (list (car l1) x)) l2)
+                (cartesian (cdr l1) l2))))
 
 (defun filter (fun lst)
     "Crea una nova llista amb els elements de lst que compleixen la condició definida per la funció fun.
@@ -57,10 +70,6 @@
           (cond ((null lst) nil)
                 ((funcall f (car lst)) (cons (car lst) (filter f (cdr lst))))
                 (t (filter f (cdr lst))))))
-
-(defun dist (x1 y1 x2 y2)
-    "Calcula la distància Euclidiana al quadrat entre (x1, y1) i (x2, y2)"
-    (+ (* (- x1 x2) (- x1 x2)) (* (- y1 y2) (- y1 y2))))
 
 (defun mapfun (x fns) (mapcar (lambda (f) (funcall f x)) fns))
 
@@ -174,15 +183,39 @@
            (memory nil))
         (list turn team paint elem pos elem-color ball-color tr-paint tr-move vision memory)))
 
-(defun vision (m cx cy range)
-    (let* ((off (truncate (sqrt (float range))))
+; d^2 = (x1 - x2)^2 + (y1 - y2)^2 
+; 
+; for a 16u^2 range, only the cells (x2 y2) will be visible from (x1 x2) if
+;    (x1 - x2)^2 + (y1 - y2)^2 <= 16
+; therefore, it is only needed to check cells that are within the 4x4 (4 = sqrt(16)) square surrounding
+; the (x1, y1) point, as the cells farther away will always exceed the limit
+; 
+;    .....................
+;    ......#########......
+;    ......#########......
+;    ......#########......
+;    ......#########......
+;    ......####X####......
+;    ......#########......
+;    ......#########......
+;    ......#########......
+;    ......#########......
+;    .....................
+
+(defun vision (m cx cy r)
+    (let* ((off (truncate (sqrt (float r))))
            (w (map-width m))
            (h (map-height m))
+           (orig (list cx cy))
+           ; calculate the bounds of the inner map & clip them to the outside of the total map
            (min-x (max 0 (- cx off)))
            (min-y (max 0 (- cy off)))
            (max-x (min (- w 1) (+ cx off)))
            (max-y (min (- h 1) (+ cy off)))
-    )))
+           (coords (filter (lambda (c) (<= (dist orig c) r))
+                           (cartesian (range min-x max-x) (range min-y max-y))))
+    ) coords))
+(defun coord-range (sx sy ex ey) (cartesian (range sx ex) (range sy ey)))
 
 ; **************************************************
 ; GAME STATE
@@ -246,27 +279,27 @@
         ; enter game loop
         (game-loop state)))
 
-; (let* ((m '(((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA B) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA G BASE E1) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA B) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA G) (TERRA R) (TERRA G) (TERRA B) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA B LAB) (TERRA G) (TERRA B) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA B) (TERRA R) (TERRA R) (TERRA B) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA R) (TERRA B) (TERRA R) (TERRA R) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA R) (TERRA G) (TERRA B) (TERRA G) (TERRA G) (TERRA B) (TERRA R) (TERRA B) (TERRA G LAB e2) (TERRA R) (TERRA R) (TERRA B) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA G) (TERRA B) (TERRA B) (TERRA G) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA R) (TERRA R) (TERRA R) (TERRA B) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA R) (TERRA R) (TERRA R) (TERRA R) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA G LAB e1) (TERRA B) (TERRA G) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA B) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA R) (TERRA B) (TERRA G) (TERRA R) (TERRA R) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA B) (TERRA G) (TERRA G) (TERRA G) (TERRA G) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA B) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA B) (TERRA G LAB e1) (TERRA G) (TERRA B) (TERRA B) (TERRA G) (TERRA G) (TERRA R) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA R) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA R) (TERRA G BASE E2) (TERRA B) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA R) (TERRA B) (TERRA B) (TERRA B) (TERRA R) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))))
-;         (dx (random 1001))
-;         (dy (random 1001))
-;         (state (state-new 0 m PAINT-INIT PAINT-INIT dx dy)))
-;     (game-loop state))
+(let* ((m '(((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA B) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA G BASE E1) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA B) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA G) (TERRA R) (TERRA G) (TERRA B) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA B LAB) (TERRA G) (TERRA B) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA B) (TERRA R) (TERRA R) (TERRA B) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA R) (TERRA B) (TERRA R) (TERRA R) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (TERRA R) (TERRA G) (TERRA B) (TERRA G) (TERRA G) (TERRA B) (TERRA R) (TERRA B) (TERRA G LAB e2) (TERRA R) (TERRA R) (TERRA B) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA G) (TERRA B) (TERRA B) (TERRA G) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA R) (TERRA R) (TERRA R) (TERRA B) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA R) (TERRA R) (TERRA R) (TERRA R) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA G LAB e1) (TERRA B) (TERRA G) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA B) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA R) (TERRA B) (TERRA G) (TERRA R) (TERRA R) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA B) (TERRA G) (TERRA G) (TERRA G) (TERRA G) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA B) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA B) (TERRA G LAB e1) (TERRA G) (TERRA B) (TERRA B) (TERRA G) (TERRA G) (TERRA R) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA R) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA R) (TERRA G BASE E2) (TERRA B) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA R) (TERRA B) (TERRA B) (TERRA B) (TERRA R) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
+            ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))))
+        (dx (random 1001))
+        (dy (random 1001))
+        (state (state-new 0 m PAINT-INIT PAINT-INIT dx dy)))
+    (game-loop state))
