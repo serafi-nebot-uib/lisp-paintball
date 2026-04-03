@@ -11,30 +11,38 @@
 ; (load 'tco)    ; https://github.com/antoni-oliver/defun-tco
 
 ;; Altres fitxers de la pràctica:
-; (load 'grafics)
-; (load 'agent-abc123)
-; (load 'agent-xyz999)
+; (load "grafics.lsp")
+
+; TODO: rename agents to author names
+(load "agent-abc123.lsp")
+(load "agent-xyz999.lsp")
 
 ; **************************************************
 ; CONSTANTS
 ; **************************************************
 
-(defconstant PAINT-INIT       200)
-(defconstant PAINT-INC-TURN   2)
-(defconstant PAINT-INC-LAB    1)
-(defconstant TEAM-1           'e1)
-(defconstant TEAM-2           'e2)
-(defconstant WATER            'aigua)
-(defconstant LAND             'terra)
-(defconstant LAB              'lab)
-(defconstant BASE             'base)
-(defconstant BALL             'bolla)
-(defconstant UNIT-TYPES       (list BASE BALL))
-(defconstant VISION-BASE      64)
-(defconstant VISION-BALL      20)
-(defconstant RGB-R                'r)
-(defconstant RGB-G                'g)
-(defconstant RGB-B                'b)
+(defconstant PAINT-INIT                 200)
+(defconstant PAINT-INC-TURN             2)
+(defconstant PAINT-INC-LAB              1)
+(defconstant TEAM-1                     'e1)
+(defconstant TEAM-2                     'e2)
+(defconstant WATER                      'aigua)
+(defconstant LAND                       'terra)
+(defconstant LAB                        'lab)
+(defconstant BASE                       'base)
+(defconstant BALL                       'bolla)
+(defconstant UNIT-TYPES                 (list BASE BALL))
+(defconstant VISION-BASE                64)
+(defconstant VISION-BALL                20)
+(defconstant RGB-R                      'r)
+(defconstant RGB-G                      'g)
+(defconstant RGB-B                      'b)
+(defconstant BALL-MOVE-TR               1)
+(defconstant BALL-MOVE-TR-DIAG          1.4142)
+(defconstant BALL-MOVE-TR-DIFF-COLOR    3)
+(defconstant BALL-MOVE-RANGE            2)
+(defconstant BALL-PAINT-TR              3)
+(defconstant BALL-PAINT-RANGE           5)
 
 ; **************************************************
 ; UTILITIES
@@ -48,15 +56,21 @@
           ((atom lst) (list lst))
           (t (append (flatten (car lst)) (flatten (cdr lst))))))
 
+(defun add   (a b) (mapcar '+ a b))
+(defun sub   (a b) (mapcar '- a b))
+(defun div   (a b) (mapcar '/ a b))
+(defun mul   (a b) (mapcar '* a b))
+(defun equ   (a b) (mapcar '= a b))
+(defun lt    (a b) (mapcar '< a b))
+(defun gt    (a b) (mapcar '> a b))
+(defun lte   (a b) (mapcar '<= a b))
+(defun gte   (a b) (mapcar '>= a b))
+(defun pow   (a e) (mapcar (lambda (x) (expt x e)) a))
+(defun dist  (a b) (sum (pow (sub a b) 2)))
+(defun sum   (a)   (reduce '+ (flatten a)))
+(defun prod  (a)   (reduce '* (flatten a)))
+
 (defun range (s e) (if (> s e) nil (cons s (range (1+ s) e))))
-(defun add (a b) (mapcar '+ a b))
-(defun sub (a b) (mapcar '- a b))
-(defun div (a b) (mapcar '/ a b))
-(defun mul (a b) (mapcar '* a b))
-(defun sum  (a) (reduce '+ (flatten a)))
-(defun prod (a) (reduce '* (flatten a)))
-(defun pow (a e) (mapcar (lambda (x) (expt x e)) a))
-(defun dist (a b) (sum (pow (sub a b) 2)))
 (defun cartesian (l1 l2)
     (if (null l1)
         nil
@@ -86,8 +100,11 @@
         (close fp)
         m))
 
+(defun map-get    (m x y) (and (>= x 0) (>= y 0) (nth x (nth y m))))
+(defun map-set    (m x y cell) (list-set m y (list-set (nth y m) x cell)))
 (defun map-height (m) (length m))
-(defun map-width (m) (length (car m)))
+(defun map-width  (m) (length (car m)))
+(defun map-bounds (m x y) (and (>= x 0) (>= y 0) (< x (map-width m)) (< y (map-height m))))
 
 (defun map-count (m fun)
     "Calcula el nombre de cel·les del mapa m que compleixen amb la condició retornada per fun."
@@ -106,31 +123,30 @@
         Aigua: (AIGUA)
         Terra: (TERRA COLOR)
           Lab: (TERRA COLOR LAB   EQUIP)
-         Base: (TERRA COLOR BASE  EQUIP COLORS-PINTAT)
-        Bolla: (TERRA COLOR BOLLA EQUIP COLORS-PINTAT COLOR-PROPI TR-PINTAR TR-MOURE)
+         Base: (TERRA COLOR BASE  EQUIP ID COLORS-PINTAT)
+        Bolla: (TERRA COLOR BOLLA EQUIP ID COLORS-PINTAT COLOR-PROPI TR-PINTAR TR-MOURE)
 |#
 
 ; cell accessor functions
-(defun cell-get           (m x y) (and (>= x 0) (>= y 0) (nth x (nth y m))))
-(defun cell-set           (m x y cell) (list-set m y (list-set (nth y m) x cell)))
 (defun cell-type          (cell) (nth 0 cell))
 (defun cell-type-water    (cell) (eq (cell-type cell) WATER))
 (defun cell-type-land     (cell) (eq (cell-type cell) LAND))
 (defun cell-color         (cell) (nth 1 cell))
-(defun cell-element       (cell) (nth 2 cell))
-(defun cell-element-team  (cell) (nth 3 cell))
-(defun cell-element-color (cell) (nth 4 cell))
-(defun cell-ball-color    (cell) (nth 5 cell))
-(defun cell-ball-tr-paint (cell) (nth 6 cell))
-(defun cell-ball-tr-move  (cell) (nth 7 cell))
-(defun cell-has-base      (cell) (eq (cell-element cell) BASE))
-(defun cell-has-lab       (cell) (eq (cell-element cell) LAB))
-(defun cell-has-ball      (cell) (eq (cell-element cell) BALL))
+(defun cell-unit          (cell) (nth 2 cell))
+(defun cell-unit-team     (cell) (nth 3 cell))
+(defun cell-unit-id       (cell) (nth 4 cell))
+(defun cell-unit-color    (cell) (nth 5 cell))
+(defun cell-ball-color    (cell) (nth 6 cell))
+(defun cell-ball-tr-paint (cell) (nth 7 cell))
+(defun cell-ball-tr-move  (cell) (nth 8 cell))
+(defun cell-has-base      (cell) (eq (cell-unit cell) BASE))
+(defun cell-has-lab       (cell) (eq (cell-unit cell) LAB))
+(defun cell-has-ball      (cell) (eq (cell-unit cell) BALL))
 
 (defun cell-ball-tr-decrease (cell team)
     "Decrementa el cooldown de la cel·la cell si hi ha una bolla de l'equip team"
-    (cond ((and (cell-has-ball cell) (eq (cell-element-team cell) team))
-           (append (mapfun cell '(cell-type cell-color cell-element cell-element-team cell-element-color cell-ball-color))
+    (cond ((and (cell-has-ball cell) (eq (cell-unit-team cell) team))
+           (append (mapfun cell '(cell-type cell-color cell-unit cell-unit-team cell-unit-color cell-ball-color))
                    (list (max 0 (- (cell-ball-tr-paint cell) 1)) (max 0 (- (cell-ball-tr-move cell) 1)))))
           (t cell)))
 
@@ -139,49 +155,92 @@
 ;       perhaps it would be better to have separate and more specific functions (one for every team)
 (defun cell-check-lab-team (team)
     "Retorna una funció anònima que donada una cel·la comprova si conté un lab assignat a l'equip team"
-    (lambda (cell) (and (cell-has-lab cell) (eq (cell-element-team cell) team))))
+    (lambda (cell) (and (cell-has-lab cell) (eq (cell-unit-team cell) team))))
 
 ; **************************************************
 ; UNITS
 ; **************************************************
 
-(defun unit-find (m team)
+(defun unit-find (m team unit-type)
     "Retorna les posicions (x y) de les unitats de l'equip team."
-    (unit-find-rows m team 0))
+    (unit-find-rows m team 0 unit-type))
 
-(defun unit-find-rows (m team y)
+(defun unit-find-rows (m team y unit-type)
     "Cerca unitats de l'equip team per files."
     (cond ((null m) nil)
-          (t (append (unit-find-cols (car m) team 0 y)
-                     (unit-find-rows (cdr m) team (1+ y))))))
+          (t (append (unit-find-cols (car m) team 0 y unit-type)
+                     (unit-find-rows (cdr m) team (1+ y) unit-type)))))
 
-(defun unit-find-cols (row team x y)
+(defun unit-find-cols (row team x y unit-type)
     "Cerca unitats de l'equip team per columnes dins una fila."
     (cond ((null row) nil)
-          ((and (member (cell-element (car row)) UNIT-TYPES)
-                (eq (cell-element-team (car row)) team))
-           (cons (list x y) (unit-find-cols (cdr row) team (1+ x) y)))
-          (t (unit-find-cols (cdr row) team (1+ x) y))))
+          ((and (eq (cell-unit (car row)) unit-type)
+                (eq (cell-unit-team (car row)) team))
+           (cons (list x y) (unit-find-cols (cdr row) team (1+ x) y unit-type)))
+          (t (unit-find-cols (cdr row) team (1+ x) y unit-type))))
 
-(defun unit-info (state team x y cell)
-    "Construeix la llista d'informacio que s'envia a l'agent per una unitat.
-     Format: (torn equip pintura tipus posicio colors-pintat color-bolla
-              tr-pintar tr-moure visio memoria)."
+(defun unit-info (state team x y)
+    "Construeix la llista d'informació que s'envia a l'agent per una unitat.
+     Format: (ronda equip pintura id-unitat tipus-unitat coordenada colors-pintat color-propi
+        tr-pintar tr-moure visió memòria-compartida)"
     (let* ((turn (state-turn state))
            (m (state-map state))
+           (cell (cell-get m x y))
            (paint (state-paint-get state team))
-           (dx (state-dx state))
-           (dy (state-dy state))
-           (elem (cell-element cell))
-           (pos (list (+ x dx) (+ y dy)))
-           (elem-color (cell-element-color cell))
+           (id (cell-unit-id cell))
+           (unit (cell-unit cell))
+           (coord (list (+ x (state-dx state)) (+ y (state-dy state))))
+           (unit-color (cell-unit-color cell))
            (ball-color (cell-ball-color cell))
            (tr-paint (cell-ball-tr-paint cell))
            (tr-move (cell-ball-tr-move cell))
-           (vision-range (if (eq elem BASE) VISION-BASE VISION-BALL))
-           (vision (compute-vision m x y vision-range dx dy))
-           (memory nil))
-        (list turn team paint elem pos elem-color ball-color tr-paint tr-move vision memory)))
+           (vision-range (if (eq unit BASE) VISION-BASE VISION-BALL))
+           (vis (unit-vision m x y vision-range))
+           (mem nil))
+        (list turn team paint id unit coord unit-color ball-color tr-paint tr-move vis mem)))
+
+(defun unit-agent (team info)
+    (if (eq team TEAM-1)
+        (agent-abc123 info)
+        (agent-xyz999 info)))
+
+(defun unit-action (state team))
+
+(defun unit-ball-move (state team src dst)
+    (let* ((m (state-map state))
+           (ux (car src))
+           (uy (cadr src))
+           (tx (car dst))
+           (ty (cadr dst))
+           (src-cell (cell-get m ux uy))
+           (dst-cell (cell-get m tx ty))
+           (tr-move (cell-ball-tr-move src-cell))
+           (d (dist src dst)))
+          (if (and (cell-has-ball src-cell)    ; unit is a ball
+                   (< tr-move BALL-MOVE-TR)         ; tr-move below required threshold
+                   (<= d BALL-MOVE-RANGE)      ; destination within move range
+                   (map-bounds m tx ty)        ; destination within map bounds
+                   (null (cell-unit dst-cell)) ; destination has no units
+                   (> d 0))                    ; destination is not the same as source
+              (let* (
+                        ; because the move range is the immediate 8 cells every diagonal move
+                        ; is exactly at distance 2
+                        (diag-penalty (if (= d 2) BALL-MOVE-TR-DIAG 1))
+                        (ball-color (cell-ball-color src-cell))
+                        (dst-color (cell-color dst-cell))
+                        (color-penalty (if (eq ball-color dst-color) 1 BALL-MOVE-TR-DIFF-COLOR))
+                        (tr-move-new (+ tr-move (* BALL-MOVE-TR diag-penalty color-penalty)))
+                        (unit-id (cell-unit-id src-cell))
+                        (tr-paint (cell-ball-tr-paint src-cell))
+                        (src-new (list LAND (cell-color src-cell)))
+                        (dst-new (list LAND dst-color BALL team unit-id ball-color tr-paint tr-move-new))
+                        (m-new (map-set (map-set m ux uy src-new) tx ty dst-new))
+              ))
+          )))
+
+(defun unit-ball-paint ())
+
+(defun unit-base-create-ball ())
 
 ; d^2 = (x1 - x2)^2 + (y1 - y2)^2 
 ; 
@@ -202,30 +261,31 @@
 ;    ......#########......
 ;    .....................
 
-(defun vision (m cx cy r)
+(defun unit-vision (m cx cy r)
     (let* ((off (truncate (sqrt (float r))))
            (w (map-width m))
            (h (map-height m))
-           (orig (list cx cy))
+           (src (list cx cy))
            ; calculate the bounds of the inner map & clip them to the outside of the total map
            (min-x (max 0 (- cx off)))
            (min-y (max 0 (- cy off)))
            (max-x (min (- w 1) (+ cx off)))
            (max-y (min (- h 1) (+ cy off)))
-           (coords (filter (lambda (c) (<= (dist orig c) r))
-                           (cartesian (range min-x max-x) (range min-y max-y))))
-    ) coords))
-(defun coord-range (sx sy ex ey) (cartesian (range sx ex) (range sy ey)))
+           ; generate all of the coordinates for the inner map (entire square)
+           (coord-range (cartesian (range min-x max-x) (range min-y max-y))))
+        ; filter all of the inner map coordinates that are visible with range r
+        (filter (lambda (dst) (<= (dist src dst) r)) coord-range)))
 
 ; **************************************************
 ; GAME STATE
 ; **************************************************
 
-(defun state-new (turn m pt1 pt2 dx dy) (list turn m pt1 pt2 dx dy))
-(defun state-turn (s) (nth 0 s))
-(defun state-map  (s) (nth 1 s))
-(defun state-dx   (s) (nth 4 s))
-(defun state-dy   (s) (nth 5 s))
+(defun state-new (turn m pt1 pt2 dx dy next-id) (list turn m pt1 pt2 dx dy next-id))
+(defun state-turn      (s) (nth 0 s))
+(defun state-map       (s) (nth 1 s))
+(defun state-dx        (s) (nth 4 s))
+(defun state-dy        (s) (nth 5 s))
+(defun state-next-id   (s) (nth 6 s))
 (defun state-paint-get (s team)
     (cond ((eq team TEAM-1) (nth 2 s))
           ((eq team TEAM-2) (nth 3 s))))
@@ -256,11 +316,13 @@
            (s1 (game-paint-increase s team))
            ; 2. decrement cooldowns
            (s2 (game-tr-decrease s1 team))
-           ; 3. process all units
-           (s3 (units-find (state-map s2) team))
+           ; 3. find all bases & call agents
+           (bases (unit-find (state-map s2) team BASE))
+           (info-list (mapcar (lambda (xy) (unit-info s team (car xy) (cadr xy))) bases))
+           (actions (mapcar (lambda (info) (unit-agent team info)) info-list))
         )
         ; 4. increase turn
-        (list-set s3 0 (1+ turn))))
+        (list-set s2 0 (1+ turn))))
 
 (defun game-loop (s)
     (let* ((n1 (game-paint-increase s TEAM-1))
@@ -272,34 +334,36 @@
     (let* ((m (map-load map-name))
            (dx (random 1001))
            (dy (random 1001))
-           (state (state-new 0 m PAINT-INIT PAINT-INIT dx dy)))
+           (state (state-new 0 m PAINT-INIT PAINT-INIT dx dy 0)))
         ; graphic window setup
         ; (color 0 0 0 255 255 255)
         ; (mode 0 0 640 375)
         ; enter game loop
         (game-loop state)))
 
-(let* ((m '(((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA B) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA G BASE E1) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA B) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA G) (TERRA R) (TERRA G) (TERRA B) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA B LAB) (TERRA G) (TERRA B) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA B) (TERRA R) (TERRA R) (TERRA B) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA R) (TERRA B) (TERRA R) (TERRA R) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (TERRA R) (TERRA G) (TERRA B) (TERRA G) (TERRA G) (TERRA B) (TERRA R) (TERRA B) (TERRA G LAB e2) (TERRA R) (TERRA R) (TERRA B) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA G) (TERRA B) (TERRA B) (TERRA G) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA R) (TERRA R) (TERRA R) (TERRA B) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA R) (TERRA R) (TERRA R) (TERRA R) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA G LAB e1) (TERRA B) (TERRA G) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA B) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA R) (TERRA B) (TERRA G) (TERRA R) (TERRA R) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA B) (TERRA G) (TERRA G) (TERRA G) (TERRA G) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA B) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA B) (TERRA G LAB e1) (TERRA G) (TERRA B) (TERRA B) (TERRA G) (TERRA G) (TERRA R) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA R) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA R) (TERRA G BASE E2) (TERRA B) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA R) (TERRA B) (TERRA B) (TERRA B) (TERRA R) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
-            ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))))
-        (dx (random 1001))
-        (dy (random 1001))
-        (state (state-new 0 m PAINT-INIT PAINT-INIT dx dy)))
-    (game-loop state))
+; (let* ((m '(((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA B) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA G BASE E1) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA B) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA G) (TERRA R) (TERRA G) (TERRA B) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA B LAB) (TERRA G) (TERRA B) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA B) (TERRA R) (TERRA R) (TERRA B) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA R) (TERRA B) (TERRA R) (TERRA R) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (TERRA R) (TERRA G) (TERRA B) (TERRA G) (TERRA G) (TERRA B) (TERRA R) (TERRA B) (TERRA G LAB e2) (TERRA R) (TERRA R) (TERRA B) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA G) (TERRA B) (TERRA B) (TERRA G) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA R) (TERRA R) (TERRA R) (TERRA B) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA R) (TERRA R) (TERRA R) (TERRA R) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA G LAB e1) (TERRA B) (TERRA G) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA B) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA R) (TERRA B) (TERRA G) (TERRA R) (TERRA R) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA B) (TERRA G) (TERRA G) (TERRA G) (TERRA G) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA B) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA B) (TERRA G LAB e1) (TERRA G) (TERRA B) (TERRA B) (TERRA G) (TERRA G) (TERRA R) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA R) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA R) (TERRA G BASE E2) (TERRA B) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA R) (TERRA B) (TERRA B) (TERRA B) (TERRA R) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
+;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))))
+;         (dx (random 1001))
+;         (dy (random 1001))
+;         (state (state-new 0 m PAINT-INIT PAINT-INIT dx dy)))
+;     (game-loop state))
+
+; TODO: change all coordinates to a tuple
