@@ -77,13 +77,13 @@
         (append (mapcar (lambda (x) (list (car l1) x)) l2)
                 (cartesian (cdr l1) l2))))
 
-(defun filter (fun lst)
+(defun filter (lst &optional fun)
     "Crea una nova llista amb els elements de lst que compleixen la condició definida per la funció fun.
     Si f=nil llavors s'eliminen tots els elements nil de la llista lst."
     (let* ((f (if (null fun) (lambda (x) (not (null x))) fun)))
           (cond ((null lst) nil)
-                ((funcall f (car lst)) (cons (car lst) (filter f (cdr lst))))
-                (t (filter f (cdr lst))))))
+                ((funcall f (car lst)) (cons (car lst) (filter (cdr lst) f)))
+                (t (filter (cdr lst) f)))))
 
 (defun mapfun (x fns) (mapcar (lambda (f) (funcall f x)) fns))
 
@@ -100,11 +100,12 @@
         (close fp)
         m))
 
-(defun map-get    (m x y) (and (>= x 0) (>= y 0) (nth x (nth y m))))
-(defun map-set    (m x y cell) (list-set m y (list-set (nth y m) x cell)))
 (defun map-height (m) (length m))
 (defun map-width  (m) (length (car m)))
 (defun map-bounds (m x y) (and (>= x 0) (>= y 0) (< x (map-width m)) (< y (map-height m))))
+(defun map-cell (m x y &optional val)
+    (if val (list-set m y (list-set (nth y m) x val))
+            (nth x (nth y m))))
 
 (defun map-count (m fun)
     "Calcula el nombre de cel·les del mapa m que compleixen amb la condició retornada per fun."
@@ -128,17 +129,17 @@
 |#
 
 ; cell accessor functions
-(defun cell-type          (cell) (nth 0 cell))
+(defun cell-type          (cell &optional new) (if new (list-set cell 0 new) (nth 0 cell)))
+(defun cell-color         (cell &optional new) (if new (list-set cell 1 new) (nth 1 cell)))
+(defun cell-unit          (cell &optional new) (if new (list-set cell 2 new) (nth 2 cell)))
+(defun cell-unit-team     (cell &optional new) (if new (list-set cell 3 new) (nth 3 cell)))
+(defun cell-unit-id       (cell &optional new) (if new (list-set cell 4 new) (nth 4 cell)))
+(defun cell-unit-paint    (cell &optional new) (if new (list-set cell 5 new) (nth 5 cell)))
+(defun cell-unit-color    (cell &optional new) (if new (list-set cell 6 new) (nth 6 cell)))
+(defun cell-unit-tr-paint (cell &optional new) (if new (list-set cell 7 new) (nth 7 cell)))
+(defun cell-unit-tr-move  (cell &optional new) (if new (list-set cell 8 new) (nth 8 cell)))
 (defun cell-type-water    (cell) (eq (cell-type cell) WATER))
 (defun cell-type-land     (cell) (eq (cell-type cell) LAND))
-(defun cell-color         (cell) (nth 1 cell))
-(defun cell-unit          (cell) (nth 2 cell))
-(defun cell-unit-team     (cell) (nth 3 cell))
-(defun cell-unit-id       (cell) (nth 4 cell))
-(defun cell-unit-color    (cell) (nth 5 cell))
-(defun cell-ball-color    (cell) (nth 6 cell))
-(defun cell-ball-tr-paint (cell) (nth 7 cell))
-(defun cell-ball-tr-move  (cell) (nth 8 cell))
 (defun cell-has-base      (cell) (eq (cell-unit cell) BASE))
 (defun cell-has-lab       (cell) (eq (cell-unit cell) LAB))
 (defun cell-has-ball      (cell) (eq (cell-unit cell) BALL))
@@ -146,8 +147,8 @@
 (defun cell-ball-tr-decrease (cell team)
     "Decrementa el cooldown de la cel·la cell si hi ha una bolla de l'equip team"
     (cond ((and (cell-has-ball cell) (eq (cell-unit-team cell) team))
-           (append (mapfun cell '(cell-type cell-color cell-unit cell-unit-team cell-unit-color cell-ball-color))
-                   (list (max 0 (- (cell-ball-tr-paint cell) 1)) (max 0 (- (cell-ball-tr-move cell) 1)))))
+           (append (mapfun cell '(cell-type cell-color cell-unit cell-unit-team cell-unit-id cell-unit-paint cell-unit-color))
+                   (list (max 0 (- (cell-unit-tr-paint cell) 1)) (max 0 (- (cell-unit-tr-move cell) 1)))))
           (t cell)))
 
 ; TODO: is there a way to generalize this? leaving it for the moment
@@ -156,6 +157,20 @@
 (defun cell-check-lab-team (team)
     "Retorna una funció anònima que donada una cel·la comprova si conté un lab assignat a l'equip team"
     (lambda (cell) (and (cell-has-lab cell) (eq (cell-unit-team cell) team))))
+
+; **************************************************
+; GAME STATE
+; **************************************************
+
+(defun state-new (turn m pt1 pt2 dx dy next-id) (list turn m pt1 pt2 dx dy next-id))
+(defun state-turn      (s &optional new) (if new (list-set s 0 new) (nth 0 s)))
+(defun state-map       (s &optional new) (if new (list-set s 1 new) (nth 1 s)))
+(defun state-paint     (s team &optional new)
+    (if new (if (eq team TEAM-1) (list-set s 2 new) (list-set s 3 new))
+            (if (eq team TEAM-1) (nth 2 s) (nth 3 s))))
+(defun state-dx        (s &optional new) (if new (list-set s 4 new) (nth 4 s)))
+(defun state-dy        (s &optional new) (if new (list-set s 5 new) (nth 5 s)))
+(defun state-next-id   (s &optional new) (if new (list-set s 6 new) (nth 6 s)))
 
 ; **************************************************
 ; UNITS
@@ -185,15 +200,15 @@
         tr-pintar tr-moure visió memòria-compartida)"
     (let* ((turn (state-turn state))
            (m (state-map state))
-           (cell (cell-get m x y))
-           (paint (state-paint-get state team))
+           (cell (map-cell m x y))
+           (paint (state-paint state team))
            (id (cell-unit-id cell))
            (unit (cell-unit cell))
            (coord (list (+ x (state-dx state)) (+ y (state-dy state))))
-           (unit-color (cell-unit-color cell))
-           (ball-color (cell-ball-color cell))
-           (tr-paint (cell-ball-tr-paint cell))
-           (tr-move (cell-ball-tr-move cell))
+           (unit-color (cell-unit-paint cell))
+           (ball-color (cell-unit-color cell))
+           (tr-paint (cell-unit-tr-paint cell))
+           (tr-move (cell-unit-tr-move cell))
            (vision-range (if (eq unit BASE) VISION-BASE VISION-BALL))
            (vis (unit-vision m x y vision-range))
            (mem nil))
@@ -212,9 +227,9 @@
            (uy (cadr src))
            (tx (car dst))
            (ty (cadr dst))
-           (src-cell (cell-get m ux uy))
-           (dst-cell (cell-get m tx ty))
-           (tr-move (cell-ball-tr-move src-cell))
+           (src-cell (map-cell m ux uy))
+           (dst-cell (map-cell m tx ty))
+           (tr-move (cell-unit-tr-move src-cell))
            (d (dist src dst)))
           (if (and (cell-has-ball src-cell)    ; unit is a ball
                    (< tr-move BALL-MOVE-TR)         ; tr-move below required threshold
@@ -226,17 +241,18 @@
                         ; because the move range is the immediate 8 cells every diagonal move
                         ; is exactly at distance 2
                         (diag-penalty (if (= d 2) BALL-MOVE-TR-DIAG 1))
-                        (ball-color (cell-ball-color src-cell))
+                        (ball-color (cell-unit-color src-cell))
+                        (ball-painted (cell-unit-paint src-cell))
                         (dst-color (cell-color dst-cell))
                         (color-penalty (if (eq ball-color dst-color) 1 BALL-MOVE-TR-DIFF-COLOR))
                         (tr-move-new (+ tr-move (* BALL-MOVE-TR diag-penalty color-penalty)))
                         (unit-id (cell-unit-id src-cell))
-                        (tr-paint (cell-ball-tr-paint src-cell))
+                        (tr-paint (cell-unit-tr-paint src-cell))
                         (src-new (list LAND (cell-color src-cell)))
-                        (dst-new (list LAND dst-color BALL team unit-id ball-color tr-paint tr-move-new))
-                        (m-new (map-set (map-set m ux uy src-new) tx ty dst-new))
-              ))
-          )))
+                        (dst-new (list LAND dst-color BALL team unit-id ball-painted ball-color tr-paint tr-move-new))
+                        (m-new (map-cell (map-cell m ux uy src-new) tx ty dst-new)))
+                    (state-map state m-new)))
+        state))
 
 (defun unit-ball-paint ())
 
@@ -274,24 +290,7 @@
            ; generate all of the coordinates for the inner map (entire square)
            (coord-range (cartesian (range min-x max-x) (range min-y max-y))))
         ; filter all of the inner map coordinates that are visible with range r
-        (filter (lambda (dst) (<= (dist src dst) r)) coord-range)))
-
-; **************************************************
-; GAME STATE
-; **************************************************
-
-(defun state-new (turn m pt1 pt2 dx dy next-id) (list turn m pt1 pt2 dx dy next-id))
-(defun state-turn      (s) (nth 0 s))
-(defun state-map       (s) (nth 1 s))
-(defun state-dx        (s) (nth 4 s))
-(defun state-dy        (s) (nth 5 s))
-(defun state-next-id   (s) (nth 6 s))
-(defun state-paint-get (s team)
-    (cond ((eq team TEAM-1) (nth 2 s))
-          ((eq team TEAM-2) (nth 3 s))))
-(defun state-paint-set (s team p)
-    (cond ((eq team TEAM-1) (list-set s 2 p))
-          ((eq team TEAM-2) (list-set s 3 p))))
+        (filter coord-range (lambda (dst) (<= (dist src dst) r)))))
 
 ; **************************************************
 ; CONTROLLER
@@ -302,8 +301,8 @@
     (let* ((m (state-map s))
            (labs (map-count m (cell-check-lab-team team)))
            (inc (+ PAINT-INC-TURN (* PAINT-INC-LAB labs)))
-           (curr (state-paint-get s team)))
-          (state-paint-set s team (+ curr inc))))
+           (curr (state-paint s team)))
+          (state-paint s team (+ curr inc))))
 
 (defun game-tr-decrease (s team)
     "Decrementa el cooldown de totes les cel·les del mapa que contenen una bolla del l'equip team"
@@ -318,7 +317,7 @@
            (s2 (game-tr-decrease s1 team))
            ; 3. find all bases & call agents
            (bases (unit-find (state-map s2) team BASE))
-           (info-list (mapcar (lambda (xy) (unit-info s team (car xy) (cadr xy))) bases))
+           (info-list (mapcar (lambda (xy) (unit-info s2 team (car xy) (cadr xy))) bases))
            (actions (mapcar (lambda (info) (unit-agent team info)) info-list))
         )
         ; 4. increase turn
@@ -327,8 +326,8 @@
 (defun game-loop (s)
     (let* ((n1 (game-paint-increase s TEAM-1))
             (n2 (game-paint-increase s TEAM-2)))
-        (print (state-paint-get n1 TEAM-1))
-        (print (state-paint-get n2 TEAM-2))))
+        (print (state-paint n1 TEAM-1))
+        (print (state-paint n2 TEAM-2))))
 
 (defun paintball (map-name)
     (let* ((m (map-load map-name))
