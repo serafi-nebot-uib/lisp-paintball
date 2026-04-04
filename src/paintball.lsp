@@ -45,6 +45,9 @@
 (defconstant BALL-PAINT-TR              3)
 (defconstant BALL-PAINT-RANGE           5)
 (defconstant BALL-PAINT-TR-DIFF-COLOR   3)
+(defconstant BASE-CREATE-COST           50)
+(defconstant BASE-CREATE-RANGE          2)
+
 
 ; **************************************************
 ; UTILITIES
@@ -78,14 +81,6 @@
         nil
         (append (mapcar (lambda (x) (list (car l1) x)) l2)
                 (cartesian (cdr l1) l2))))
-
-(defun filter (lst &optional fun)
-    "Crea una nova llista amb els elements de lst que compleixen la condició definida per la funció fun.
-    Si f=nil llavors s'eliminen tots els elements nil de la llista lst."
-    (let* ((f (if (null fun) (lambda (x) (not (null x))) fun)))
-          (cond ((null lst) nil)
-                ((funcall f (car lst)) (cons (car lst) (filter (cdr lst) f)))
-                (t (filter (cdr lst) f)))))
 
 (defun mapfun (x fns) (mapcar (lambda (f) (funcall f x)) fns))
 
@@ -156,8 +151,15 @@
 (defun cell-ball-tr-decrease (cell team)
     "Decrementa el cooldown de la cel·la cell si hi ha una bolla de l'equip team"
     (cond ((and (cell-has-ball cell) (eq (cell-unit-team cell) team))
-           (append (mapfun cell '(cell-type cell-color cell-unit cell-unit-team cell-unit-id cell-unit-paint cell-unit-color))
-                   (list (max 0 (- (cell-unit-tr-paint cell) 1)) (max 0 (- (cell-unit-tr-move cell) 1)))))
+           (list (cell-type cell)
+                 (cell-color cell)
+                 (cell-unit cell)
+                 (cell-unit-team cell)
+                 (cell-unit-id cell)
+                 (cell-unit-paint cell)
+                 (cell-unit-color cell)
+                 (max 0 (- (cell-unit-tr-paint cell) 1))
+                 (max 0 (- (cell-unit-tr-move cell) 1))))
           (t cell)))
 
 ; TODO: is there a way to generalize this? leaving it for the moment
@@ -290,7 +292,7 @@
            (d (dist src dst)))
           (cond ((and (cell-has-ball src-cell)          ; unit is a ball
                    (eq (cell-unit-team src-cell) team)  ; unit is owned by team
-                   (< tr-paint BALL-MOVE-TR)            ; tr-paint below required threshold
+                   (< tr-paint BALL-PAINT-TR)           ; tr-paint below required threshold
                    (<= d BALL-PAINT-RANGE)              ; destination within move range
                    (map-bounds m tx ty)                 ; destination within map bounds
                    (cell-type-land dst-cell))           ; destination is land
@@ -306,7 +308,32 @@
                        (state-map state (map-cell (map-cell m ux uy src-cell-new) tx ty dst-cell-new))))
                 (t state))))
 
-(defun unit-base-create-ball ())
+(defun unit-base-create-ball (state team src dst color)
+    (let* ((m (state-map state))
+           (ux (car src))
+           (uy (cadr src))
+           (tx (car dst))
+           (ty (cadr dst))
+           (src-cell (map-cell m ux uy))
+           (dst-cell (map-cell m tx ty))
+           (paint (state-paint state team))
+           (d (dist src dst)))
+          (cond ((and (cell-has-base src-cell)             ; unit is a base
+                      (eq (cell-unit-team src-cell) team)  ; unit is owned by team
+                      (>= paint BASE-CREATE-COST)          ; team has enough paint
+                      (<= d BASE-CREATE-RANGE)             ; destination within create range
+                      (map-bounds m tx ty)                 ; destination within map bounds
+                      (cell-type-land dst-cell)            ; destination is land
+                      (null (cell-unit dst-cell))          ; destination has no units
+                      (> d 0))                             ; destination is not the same as source
+                 (let* ((next-id (state-next-id state))
+                        (dst-new (list LAND (cell-color dst-cell) BALL team next-id (list color) color 0 0))
+                        (m-new (map-cell m tx ty dst-new))
+                        (s1 (state-map state m-new))
+                        (s2 (state-paint s1 team (- paint BASE-CREATE-COST)))
+                        (s3 (state-next-id s2 (1+ next-id))))
+                     s3))
+                (t state))))
 
 ; d^2 = (x1 - x2)^2 + (y1 - y2)^2 
 ; 
@@ -340,7 +367,7 @@
            ; generate all of the coordinates for the inner map (entire square)
            (coord-range (cartesian (range min-x max-x) (range min-y max-y))))
         ; filter all of the inner map coordinates that are visible with range r
-        (filter coord-range (lambda (dst) (<= (dist src dst) r)))))
+        (remove-if (lambda (dst) (> (dist src dst) r)) coord-range)))
 
 ; **************************************************
 ; CONTROLLER
