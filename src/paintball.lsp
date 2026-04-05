@@ -71,9 +71,11 @@
 (defun lte   (a b) (mapcar '<= a b))
 (defun gte   (a b) (mapcar '>= a b))
 (defun pow   (a e) (mapcar (lambda (x) (expt x e)) a))
-(defun dist  (a b) (sum (pow (sub a b) 2)))
 (defun sum   (a)   (reduce '+ (flatten a)))
 (defun prod  (a)   (reduce '* (flatten a)))
+(defun dist  (a b) (sum (pow (sub a b) 2)))
+
+(defun zip   (&rest l) (apply #'mapcar #'list l))
 
 (defun range (s e) (if (> s e) nil (cons s (range (1+ s) e))))
 (defun cartesian (l1 l2)
@@ -95,12 +97,12 @@
 ; MAP
 ; **************************************************
 
+; TODO: add cell init (units need a unique id)
 (defun map-load (name)
     "Carrega el mapa a partir del seu nom, especificat al paràmetre name."
     (let* ((fp (open (format nil "maps/~a.map" name) :direction :input))
            (m (read fp nil nil)))
-        (close fp)
-        m))
+        (close fp) (map-init-rows m 0)))
 
 (defun map-height (m) (length m))
 (defun map-width  (m) (length (car m)))
@@ -116,9 +118,7 @@
     "Calcula el nombre de cel·les del mapa m que compleixen amb la condició retornada per fun."
     (sum (mapcar (lambda (row) (bool->int (mapcar fun row))) m)))
 
-(defun map-apply (m fun)
-    "Crida a la funció fun per a cada una de les cel·les del mapa m."
-    (mapcar (lambda (row) (mapcar fun row)) m))
+(defun map-apply (m fun) (mapcar (lambda (row) (mapcar fun row)) m))
 
 ; *************************************************
 ; CELLS
@@ -132,6 +132,28 @@
          Base: (TERRA COLOR BASE  EQUIP ID COLORS-PINTAT)
         Bolla: (TERRA COLOR BOLLA EQUIP ID COLORS-PINTAT COLOR-PROPI TR-PINTAR TR-MOURE)
 |#
+
+(defun map-init-rows (m y)
+    (if (< y (map-height m))
+        (cons (map-init-row (nth y m) 0 y (map-width m)) (map-init-rows m (1+ y)))
+        nil))
+
+(defun map-init-row (row x y w)
+    (if (< x w)
+        (cons (cell-init (nth x row) (+ x (* y w))) (map-init-row row (1+ x) y w))
+        nil))
+
+(defun cell-init (cell next-id)
+    (cond
+        ((cell-type-water cell) (list WATER))
+        ((cell-type-land cell)
+            (cond   ((cell-has-lab cell)  (list LAND (cell-color cell) LAB (cell-unit-team cell)))
+                    ((cell-has-base cell) (list LAND (cell-color cell) BASE (cell-unit-team cell) next-id '()))
+                    ((cell-has-ball cell) (list LAND (cell-color cell) BALL (cell-unit-team cell) next-id '()
+                                                     (cell-unit-color cell)
+                                                     (cell-unit-tr-paint cell)
+                                                     (cell-unit-tr-move cell)))
+                    (t (list LAND (cell-color cell)))))))
 
 ; cell accessor functions
 (defun cell-type          (cell &optional new) (if new (list-set cell 0 new) (nth 0 cell)))
@@ -232,7 +254,8 @@
            (tr-paint (cell-unit-tr-paint cell))
            (tr-move (cell-unit-tr-move cell))
            (vision-range (if (eq unit BASE) VISION-BASE VISION-BALL))
-           (vis (unit-vision m x y vision-range))
+           (vis-coords (unit-vision m x y vision-range))
+           (vis (mapcar (lambda (xy) (unit-vision-format m (car xy) (cadr xy))) vis-coords))
            (mem nil))
         (list turn team paint id unit coord unit-color ball-color tr-paint tr-move vis mem)))
 
@@ -356,6 +379,18 @@
         ; filter all of the inner map coordinates that are visible with range r
         (remove-if (lambda (dst) (> (dist src dst) r)) coord-range)))
 
+(defun unit-vision-format (m x y)
+    (let ((cell (map-cell m x y)))
+         (list (list x y)
+          (cell-type cell)
+          (cell-color cell)
+          (cell-unit cell)
+          (cell-unit-team cell)
+          (cell-unit-paint cell)
+          (cell-unit-color cell)
+          (cell-unit-tr-paint cell)
+          (cell-unit-tr-move cell))))
+
 ; **************************************************
 ; CONTROLLER
 ; **************************************************
@@ -390,46 +425,18 @@
         ; 4. increase turn
         (list-set s2 0 (1+ turn))))
 
-(defun game-loop (s)
-    (let* ((n1 (game-paint-increase s TEAM-1))
-            (n2 (game-paint-increase s TEAM-2)))
-        (print (state-paint n1 TEAM-1))
-        (print (state-paint n2 TEAM-2))))
+(defun game-loop (s))
 
 (defun paintball (map-name)
     (let* ((m (map-load map-name))
            (dx (random 1001))
            (dy (random 1001))
-           (state (state-new 0 m PAINT-INIT PAINT-INIT dx dy 0)))
+           (state (state-new 0 m PAINT-INIT PAINT-INIT dx dy (* (map-width m) (map-height m)))))
         ; graphic window setup
         ; (color 0 0 0 255 255 255)
         ; (mode 0 0 640 375)
         ; enter game loop
+        (princ m)
         (game-loop state)))
 
-; (let* ((m '(((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA B) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA G BASE E1) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA B) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA G) (TERRA R) (TERRA G) (TERRA B) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA B LAB) (TERRA G) (TERRA B) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA B) (TERRA R) (TERRA R) (TERRA B) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA R) (TERRA B) (TERRA R) (TERRA R) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA R) (TERRA G) (TERRA B) (TERRA G) (TERRA G) (TERRA B) (TERRA R) (TERRA B) (TERRA G LAB e2) (TERRA R) (TERRA R) (TERRA B) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA G) (TERRA B) (TERRA B) (TERRA G) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA R) (TERRA R) (TERRA R) (TERRA B) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA R) (TERRA R) (TERRA R) (TERRA R) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA G LAB e1) (TERRA B) (TERRA G) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA B) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA G) (TERRA R) (TERRA B) (TERRA G) (TERRA R) (TERRA R) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA B) (TERRA G) (TERRA G) (TERRA G) (TERRA G) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (TERRA B) (TERRA R) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA B) (TERRA G LAB e1) (TERRA G) (TERRA B) (TERRA B) (TERRA G) (TERRA G) (TERRA R) (TERRA G) (TERRA R) (TERRA G) (TERRA G) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA G) (TERRA R) (TERRA B) (TERRA B) (TERRA B) (TERRA G) (TERRA G) (TERRA G) (TERRA B) (TERRA G) (TERRA R) (TERRA R) (TERRA G BASE E2) (TERRA B) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (TERRA B) (TERRA R) (TERRA G) (TERRA G) (TERRA R) (TERRA R) (TERRA B) (TERRA B) (TERRA B) (TERRA R) (TERRA B) (TERRA G) (TERRA R) (TERRA G) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))
-;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))))
-;         (dx (random 1001))
-;         (dy (random 1001))
-;         (state (state-new 0 m PAINT-INIT PAINT-INIT dx dy 0)))
-;     (game-loop state))
-
-; TODO: change all coordinates to a tuple
+(paintball "tiny")
