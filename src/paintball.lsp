@@ -109,6 +109,9 @@
     (if val (list-set m y (list-set (nth y m) x val))
             (nth x (nth y m))))
 
+(defun map-update (m &rest upd)
+    (reduce (lambda (m p) (apply #'map-cell (cons m p))) upd :initial-value m))
+
 (defun map-count (m fun)
     "Calcula el nombre de cel·les del mapa m que compleixen amb la condició retornada per fun."
     (sum (mapcar (lambda (row) (bool->int (mapcar fun row))) m)))
@@ -148,26 +151,21 @@
 
 (defun paint-check-all (paint) (and (member RGB-R paint) (member RGB-G paint) (member RGB-B paint)))
 
-(defun cell-ball-tr-decrease (cell team)
-    "Decrementa el cooldown de la cel·la cell si hi ha una bolla de l'equip team"
-    (cond ((and (cell-has-ball cell) (eq (cell-unit-team cell) team))
-           (list (cell-type cell)
-                 (cell-color cell)
-                 (cell-unit cell)
-                 (cell-unit-team cell)
-                 (cell-unit-id cell)
-                 (cell-unit-paint cell)
-                 (cell-unit-color cell)
-                 (max 0 (- (cell-unit-tr-paint cell) 1))
-                 (max 0 (- (cell-unit-tr-move cell) 1))))
-          (t cell)))
+(defun cell-owned-by (cell team) (eq (cell-unit-team cell) team))
+(defun cell-empty (cell) (null (cell-unit cell)))
+(defun cell-land-empty (cell) (and (cell-type-land cell) (cell-empty cell)))
+(defun cell-lab-team (cell team) (and (cell-has-lab cell) (cell-owned-by cell team)))
 
-; TODO: is there a way to generalize this? leaving it for the moment
-;       also, this will generate a new anonymous function every time,
-;       perhaps it would be better to have separate and more specific functions (one for every team)
-(defun cell-check-lab-team (team)
-    "Retorna una funció anònima que donada una cel·la comprova si conté un lab assignat a l'equip team"
-    (lambda (cell) (and (cell-has-lab cell) (eq (cell-unit-team cell) team))))
+(defun cell-ball-tr-decrease (cell)
+    (list (cell-type cell)
+          (cell-color cell)
+          (cell-unit cell)
+          (cell-unit-team cell)
+          (cell-unit-id cell)
+          (cell-unit-paint cell)
+          (cell-unit-color cell)
+          (max 0 (- (cell-unit-tr-paint cell) 1))
+          (max 0 (- (cell-unit-tr-move cell) 1))))
 
 (defun cell-apply-paint (team cell color)
     (let ((cell-new (cond
@@ -214,7 +212,7 @@
     "Cerca unitats de l'equip team per columnes dins una fila."
     (cond ((null row) nil)
           ((and (eq (cell-unit (car row)) unit-type)
-                (eq (cell-unit-team (car row)) team))
+                (cell-owned-by (car row) team))
            (cons (list x y) (unit-find-cols (cdr row) team (1+ x) y unit-type)))
           (t (unit-find-cols (cdr row) team (1+ x) y unit-type))))
 
@@ -247,93 +245,82 @@
 
 (defun unit-ball-move (state team src dst)
     (let* ((m (state-map state))
-           (ux (car src))
-           (uy (cadr src))
-           (tx (car dst))
-           (ty (cadr dst))
+           (ux (car src)) (uy (cadr src)) (tx (car dst)) (ty (cadr dst))
            (src-cell (map-cell m ux uy))
            (dst-cell (map-cell m tx ty))
-           (tr-move (cell-unit-tr-move src-cell))
            (d (dist src dst)))
-          (if (and (cell-has-ball src-cell)             ; unit is a ball
-                   (eq (cell-unit-team src-cell) team)  ; unit is owned by team
-                   (< tr-move BALL-MOVE-TR)             ; tr-move below required threshold
-                   (<= d BALL-MOVE-RANGE)               ; destination within move range
-                   (map-bounds m tx ty)                 ; destination within map bounds
-                   (cell-type-land dst-cell)            ; destination is land
-                   (null (cell-unit dst-cell))          ; destination has no units
-                   (> d 0))                             ; destination is not the same as source
-              (let* (
-                        ; because the move range is the immediate 8 cells every diagonal move
-                        ; is exactly at distance 2
-                        (diag-penalty (if (= d 2) BALL-MOVE-TR-DIAG 1))
-                        (ball-color (cell-unit-color src-cell))
-                        (ball-painted (cell-unit-paint src-cell))
-                        (dst-color (cell-color dst-cell))
-                        (color-penalty (if (eq ball-color dst-color) 1 BALL-MOVE-TR-DIFF-COLOR))
-                        (tr-move-new (+ tr-move (* BALL-MOVE-TR diag-penalty color-penalty)))
-                        (unit-id (cell-unit-id src-cell))
-                        (tr-paint (cell-unit-tr-paint src-cell))
-                        (src-new (list LAND (cell-color src-cell)))
-                        (dst-new (list LAND dst-color BALL team unit-id ball-painted ball-color tr-paint tr-move-new))
-                        (m-new (map-cell (map-cell m ux uy src-new) tx ty dst-new)))
-                    (state-map state m-new))
-            state)))
+      (or (when (and (cell-has-ball src-cell)
+                     (cell-owned-by src-cell team)
+                     (< (cell-unit-tr-move src-cell) BALL-MOVE-TR)
+                     (<= d BALL-MOVE-RANGE)
+                     (map-bounds m tx ty)
+                     (cell-type-land dst-cell)
+                     (cell-empty dst-cell)
+                     (> d 0))
+            (let* ((diag-penalty (if (= d 2) BALL-MOVE-TR-DIAG 1))
+                   (ball-color (cell-unit-color src-cell))
+                   (color-penalty (if (eq ball-color (cell-color dst-cell)) 1 BALL-MOVE-TR-DIFF-COLOR))
+                   (tr-move-new (+ (cell-unit-tr-move src-cell)
+                                   (* BALL-MOVE-TR diag-penalty color-penalty)))
+                   (src-new (list LAND (cell-color src-cell)))
+                   (dst-new (list LAND (cell-color dst-cell) BALL team
+                                  (cell-unit-id src-cell)
+                                  (cell-unit-paint src-cell)
+                                  ball-color
+                                  (cell-unit-tr-paint src-cell)
+                                  tr-move-new)))
+               (state-map state (map-update m
+                   (list ux uy src-new)
+                   (list tx ty dst-new))))
+          state))))
 
 (defun unit-ball-paint (state team src dst)
     (let* ((m (state-map state))
-           (ux (car src))
-           (uy (cadr src))
-           (tx (car dst))
-           (ty (cadr dst))
+           (ux (car src)) (uy (cadr src)) (tx (car dst)) (ty (cadr dst))
            (src-cell (map-cell m ux uy))
            (dst-cell (map-cell m tx ty))
-           (tr-paint (cell-unit-tr-paint src-cell))
            (d (dist src dst)))
-          (cond ((and (cell-has-ball src-cell)          ; unit is a ball
-                   (eq (cell-unit-team src-cell) team)  ; unit is owned by team
-                   (< tr-paint BALL-PAINT-TR)           ; tr-paint below required threshold
-                   (<= d BALL-PAINT-RANGE)              ; destination within move range
-                   (map-bounds m tx ty)                 ; destination within map bounds
-                   (cell-type-land dst-cell))           ; destination is land
-                 (let* ((src-color (cell-color src-cell))
-                        (ball-color (cell-unit-color src-cell))
-                        (tr-paint-new (+ tr-paint (if (eq src-color ball-color)
-                                                    BALL-PAINT-TR
-                                                    (* BALL-PAINT-TR BALL-PAINT-TR-DIFF-COLOR))))
-                        ; update source cell tr
-                        (src-cell-new (cell-unit-tr-paint src-cell tr-paint-new))
-                        ; update destination cell paint
-                        (dst-cell-new (cell-apply-paint team dst-cell ball-color)))
-                       (state-map state (map-cell (map-cell m ux uy src-cell-new) tx ty dst-cell-new))))
-                (t state))))
+      (or (when (and (cell-has-ball src-cell)
+                     (cell-owned-by src-cell team)
+                     (< (cell-unit-tr-paint src-cell) BALL-PAINT-TR)
+                     (<= d BALL-PAINT-RANGE)
+                     (map-bounds m tx ty)
+                     (cell-type-land dst-cell))
+            (let* ((src-color (cell-color src-cell))
+                   (ball-color (cell-unit-color src-cell))
+                   (tr-paint-new (+ (cell-unit-tr-paint src-cell)
+                                    (if (eq src-color ball-color)
+                                      BALL-PAINT-TR
+                                      (* BALL-PAINT-TR BALL-PAINT-TR-DIFF-COLOR))))
+                   (src-cell-new (cell-unit-tr-paint src-cell tr-paint-new))
+                   (dst-cell-new (cell-apply-paint team dst-cell ball-color)))
+               (state-map state (map-update m
+                   (list ux uy src-cell-new)
+                   (list tx ty dst-cell-new))))
+          state))))
 
 (defun unit-base-create-ball (state team src dst color)
     (let* ((m (state-map state))
-           (ux (car src))
-           (uy (cadr src))
-           (tx (car dst))
-           (ty (cadr dst))
+           (ux (car src)) (uy (cadr src)) (tx (car dst)) (ty (cadr dst))
            (src-cell (map-cell m ux uy))
            (dst-cell (map-cell m tx ty))
            (paint (state-paint state team))
            (d (dist src dst)))
-          (cond ((and (cell-has-base src-cell)             ; unit is a base
-                      (eq (cell-unit-team src-cell) team)  ; unit is owned by team
-                      (>= paint BASE-CREATE-COST)          ; team has enough paint
-                      (<= d BASE-CREATE-RANGE)             ; destination within create range
-                      (map-bounds m tx ty)                 ; destination within map bounds
-                      (cell-type-land dst-cell)            ; destination is land
-                      (null (cell-unit dst-cell))          ; destination has no units
-                      (> d 0))                             ; destination is not the same as source
-                 (let* ((next-id (state-next-id state))
-                        (dst-new (list LAND (cell-color dst-cell) BALL team next-id (list color) color 0 0))
-                        (m-new (map-cell m tx ty dst-new))
-                        (s1 (state-map state m-new))
-                        (s2 (state-paint s1 team (- paint BASE-CREATE-COST)))
-                        (s3 (state-next-id s2 (1+ next-id))))
-                     s3))
-                (t state))))
+      (or (when (and (cell-has-base src-cell)
+                     (cell-owned-by src-cell team)
+                     (>= paint BASE-CREATE-COST)
+                     (<= d BASE-CREATE-RANGE)
+                     (map-bounds m tx ty)
+                     (cell-type-land dst-cell)
+                     (cell-empty dst-cell)
+                     (> d 0))
+            (let* ((next-id (state-next-id state))
+                   (dst-new (list LAND (cell-color dst-cell) BALL team next-id (list color) color 0 0))
+                   (s1 (state-map state (map-cell m tx ty dst-new)))
+                   (s2 (state-paint s1 team (- paint BASE-CREATE-COST)))
+                   (s3 (state-next-id s2 (1+ next-id))))
+              s3))
+          state)))
 
 ; d^2 = (x1 - x2)^2 + (y1 - y2)^2 
 ; 
@@ -376,14 +363,17 @@
 (defun game-paint-increase (s team)
     "Incrementa la quantitat de pintura que li pertoca per al torn actual a l'equip team"
     (let* ((m (state-map s))
-           (labs (map-count m (cell-check-lab-team team)))
+           (labs (map-count m (lambda (cell) (cell-lab-team cell team))))
            (inc (+ PAINT-INC-TURN (* PAINT-INC-LAB labs)))
            (curr (state-paint s team)))
           (state-paint s team (+ curr inc))))
 
 (defun game-tr-decrease (s team)
     "Decrementa el cooldown de totes les cel·les del mapa que contenen una bolla del l'equip team"
-    (list-set s 1 (map-apply (state-map s) (lambda (cell) (cell-ball-tr-decrease cell team)))))
+    (state-map s (map-apply (state-map s)
+                            (lambda (cell) (if (and (cell-has-ball cell) (cell-owned-by cell team))
+                                               (cell-ball-tr-decrease cell)
+                                               cell)))))
 
 (defun game-turn (s)
     (let* ((turn (state-turn s))
@@ -439,7 +429,7 @@
 ;             ((AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA) (AIGUA))))
 ;         (dx (random 1001))
 ;         (dy (random 1001))
-;         (state (state-new 0 m PAINT-INIT PAINT-INIT dx dy)))
+;         (state (state-new 0 m PAINT-INIT PAINT-INIT dx dy 0)))
 ;     (game-loop state))
 
 ; TODO: change all coordinates to a tuple
