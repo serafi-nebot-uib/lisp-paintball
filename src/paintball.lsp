@@ -14,7 +14,7 @@
 ; (load "grafics.lsp")
 
 ; TODO: rename agents to author names
-(load "agent-abc123.lsp")
+(load "agent-sng656.lsp")
 (load "agent-xyz999.lsp")
 
 ; **************************************************
@@ -47,7 +47,10 @@
 (defconstant BALL-PAINT-TR-DIFF-COLOR   3)
 (defconstant BASE-CREATE-COST           50)
 (defconstant BASE-CREATE-RANGE          2)
-
+(defconstant ACTION-CREATE-BALL         'CREA-BOLLA)
+(defconstant ACTION-MOVE                'MOU)
+(defconstant ACTION-PAINT               'PINTA)
+(defconstant ACTION-MEM-WRITE           'ESCRIU-MEMORIA)
 
 ; **************************************************
 ; UTILITIES
@@ -261,12 +264,39 @@
 
 (defun unit-agent (team info)
     (if (eq team TEAM-1)
-        (agent-abc123 info)
+        (agent-sng656 info)
         (agent-xyz999 info)))
 
-(defun unit-action (state team))
+; ACTION STRUCTURE
+; each action is a list of two elements: (name args) 
+;    - name: the name of the action
+;    - args: list of arguments to the action
+; every unit can perform multiple actions for each round (list of actions)
+; 
+; ACTION TYPES
+;    (crea-bolla (color (x y)))
+;    (pinta ((x y)))
+;    (mou ((x y)))
+;    (escriu-memoria (addr value))
 
-(defun unit-ball-move (state team src dst)
+(defun unit-actions (state team xy actions)
+    (if actions
+        (let* ((action (car actions))
+                (name (car action))
+                (args (cadr action))
+                (next-state (cond
+                    ((eq name ACTION-MOVE) (unit-act-move state team xy (car args)))
+                    ((eq name ACTION-PAINT) (unit-act-paint state team xy (car args)))
+                    ((eq name ACTION-CREATE-BALL) (unit-act-create-ball state team xy (cadr args) (car args)))
+                    ((eq name ACTION-MEM-WRITE) (unit-act-write-mem state team (car args) (cadr args)))
+                    (t state))))
+            (unit-actions next-state team xy (cdr actions))))
+        state)
+
+; TODO: implement memory
+(defun unit-act-write-mem (state team addr value) state)
+
+(defun unit-act-move (state team src dst)
     (let* ((m (state-map state))
            (ux (car src)) (uy (cadr src)) (tx (car dst)) (ty (cadr dst))
            (src-cell (map-cell m ux uy))
@@ -297,7 +327,7 @@
                    (list tx ty dst-new))))
           state))))
 
-(defun unit-ball-paint (state team src dst)
+(defun unit-act-paint (state team src dst)
     (let* ((m (state-map state))
            (ux (car src)) (uy (cadr src)) (tx (car dst)) (ty (cadr dst))
            (src-cell (map-cell m ux uy))
@@ -322,7 +352,7 @@
                    (list tx ty dst-cell-new))))
           state))))
 
-(defun unit-base-create-ball (state team src dst color)
+(defun unit-act-create-ball (state team src dst color)
     (let* ((m (state-map state))
            (ux (car src)) (uy (cadr src)) (tx (car dst)) (ty (cadr dst))
            (src-cell (map-cell m ux uy))
@@ -410,6 +440,14 @@
                                                (cell-ball-tr-decrease cell)
                                                cell)))))
 
+(defun game-actions (state team units actions)
+    (if (and units actions)
+        (game-actions (unit-actions state team (car units) (car actions))
+                      team
+                      (cdr units)
+                      (cdr actions))
+        state))
+
 (defun game-turn (s)
     (let* ((turn (state-turn s))
            (team (if (evenp turn) TEAM-1 TEAM-2))
@@ -419,13 +457,19 @@
            (s2 (game-tr-decrease s1 team))
            ; 3. find all bases & call agents
            (bases (unit-find (state-map s2) team BASE))
-           (info-list (mapcar (lambda (xy) (unit-info s2 team (car xy) (cadr xy))) bases))
-           (actions (mapcar (lambda (info) (unit-agent team info)) info-list))
+           (base-info-list (mapcar (lambda (xy) (unit-info s2 team (car xy) (cadr xy))) bases))
+           (base-actions (mapcar (lambda (info) (unit-agent team info)) base-info-list))
+           (s3 (game-actions s2 team bases base-actions))
+           ; 3. find all balls & call agents
+           (balls (unit-find (state-map s3) team BALL))
+           (ball-info-list (mapcar (lambda (xy) (unit-info s3 team (car xy) (cadr xy))) balls))
+           (ball-actions (mapcar (lambda (info) (unit-agent team info)) ball-info-list))
+           (s4 (game-actions s3 team balls ball-actions))
         )
         ; 4. increase turn
-        (list-set s2 0 (1+ turn))))
+        (state-turn s4 (1+ turn))))
 
-(defun game-loop (s))
+(defun game-loop (s) (game-turn s))
 
 (defun paintball (map-name)
     (let* ((m (map-load map-name))
@@ -436,7 +480,6 @@
         ; (color 0 0 0 255 255 255)
         ; (mode 0 0 640 375)
         ; enter game loop
-        (princ m)
         (game-loop state)))
 
-(paintball "tiny")
+(paintball "huge")
