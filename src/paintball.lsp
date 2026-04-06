@@ -13,6 +13,8 @@
 ;; Altres fitxers de la pràctica:
 ; (load "grafics.lsp")
 
+(load "tco.lsp")
+
 ; TODO: rename agents to author names
 (load "agent-sng656.lsp")
 (load "agent-xyz999.lsp")
@@ -57,7 +59,9 @@
 ; **************************************************
 
 (defun list-set (lst n val)
-    (append (subseq lst 0 n) (list val) (subseq lst (1+ n))))
+    (if (zerop n)
+        (cons val (cdr lst))
+        (cons (car lst) (list-set (cdr lst) (1- n) val))))
 
 (defun flatten (lst)
     (cond ((null lst) nil)
@@ -74,8 +78,8 @@
 (defun lte   (a b) (mapcar '<= a b))
 (defun gte   (a b) (mapcar '>= a b))
 (defun pow   (a e) (mapcar (lambda (x) (expt x e)) a))
-(defun sum   (a)   (reduce '+ (flatten a)))
-(defun prod  (a)   (reduce '* (flatten a)))
+(defun sum   (a)   (reduce '+ a))
+(defun prod  (a)   (reduce '* a))
 (defun dist  (a b) (sum (pow (sub a b) 2)))
 
 (defun zip   (&rest l) (apply #'mapcar #'list l))
@@ -100,12 +104,33 @@
 ; MAP
 ; **************************************************
 
-; TODO: add cell init (units need a unique id)
 (defun map-load (name)
     "Carrega el mapa a partir del seu nom, especificat al paràmetre name."
     (let* ((fp (open (format nil "maps/~a.map" name) :direction :input))
            (m (read fp nil nil)))
         (close fp) (map-init-rows m 0)))
+
+(defun map-init-rows (m y)
+    (if (< y (map-height m))
+        (cons (map-init-row (nth y m) 0 y (map-width m)) (map-init-rows m (1+ y)))
+        nil))
+
+(defun map-init-row (row x y w)
+    (if (< x w)
+        (cons (map-init-cell (nth x row) (+ x (* y w))) (map-init-row row (1+ x) y w))
+        nil))
+
+(defun map-init-cell (cell next-id)
+    (cond
+        ((cell-type-water cell) (list WATER))
+        ((cell-type-land cell)
+            (cond   ((cell-has-lab cell)  (list LAND (cell-color cell) LAB (cell-unit-team cell)))
+                    ((cell-has-base cell) (list LAND (cell-color cell) BASE (cell-unit-team cell) next-id '()))
+                    ((cell-has-ball cell) (list LAND (cell-color cell) BALL (cell-unit-team cell) next-id '()
+                                                     (cell-unit-color cell)
+                                                     (cell-unit-tr-paint cell)
+                                                     (cell-unit-tr-move cell)))
+                    (t (list LAND (cell-color cell)))))))
 
 (defun map-height (m) (length m))
 (defun map-width  (m) (length (car m)))
@@ -119,7 +144,7 @@
 
 (defun map-count (m fun)
     "Calcula el nombre de cel·les del mapa m que compleixen amb la condició retornada per fun."
-    (sum (mapcar (lambda (row) (bool->int (mapcar fun row))) m)))
+    (sum (flatten (mapcar (lambda (row) (bool->int (mapcar fun row))) m))))
 
 (defun map-apply (m fun) (mapcar (lambda (row) (mapcar fun row)) m))
 
@@ -135,28 +160,6 @@
          Base: (TERRA COLOR BASE  EQUIP ID COLORS-PINTAT)
         Bolla: (TERRA COLOR BOLLA EQUIP ID COLORS-PINTAT COLOR-PROPI TR-PINTAR TR-MOURE)
 |#
-
-(defun map-init-rows (m y)
-    (if (< y (map-height m))
-        (cons (map-init-row (nth y m) 0 y (map-width m)) (map-init-rows m (1+ y)))
-        nil))
-
-(defun map-init-row (row x y w)
-    (if (< x w)
-        (cons (cell-init (nth x row) (+ x (* y w))) (map-init-row row (1+ x) y w))
-        nil))
-
-(defun cell-init (cell next-id)
-    (cond
-        ((cell-type-water cell) (list WATER))
-        ((cell-type-land cell)
-            (cond   ((cell-has-lab cell)  (list LAND (cell-color cell) LAB (cell-unit-team cell)))
-                    ((cell-has-base cell) (list LAND (cell-color cell) BASE (cell-unit-team cell) next-id '()))
-                    ((cell-has-ball cell) (list LAND (cell-color cell) BALL (cell-unit-team cell) next-id '()
-                                                     (cell-unit-color cell)
-                                                     (cell-unit-tr-paint cell)
-                                                     (cell-unit-tr-move cell)))
-                    (t (list LAND (cell-color cell)))))))
 
 ; cell accessor functions
 (defun cell-type          (cell &optional new) (if new (list-set cell 0 new) (nth 0 cell)))
@@ -448,11 +451,11 @@
                       (cdr actions))
         state))
 
-(defun game-turn (s)
-    (let* ((turn (state-turn s))
+(defun game-turn (state)
+    (let* ((turn (state-turn state))
            (team (if (evenp turn) TEAM-1 TEAM-2))
            ; 1. add paint increase
-           (s1 (game-paint-increase s team))
+           (s1 (game-paint-increase state team))
            ; 2. decrement cooldowns
            (s2 (game-tr-decrease s1 team))
            ; 3. find all bases & call agents
@@ -469,7 +472,39 @@
         ; 4. increase turn
         (state-turn s4 (1+ turn))))
 
-(defun game-loop (s) (game-turn s))
+(defun game-check-end (state)
+    (let* ((m (state-map state))
+           (t1-alive (unit-find m TEAM-1 BASE))
+           (t2-alive (unit-find m TEAM-2 BASE)))
+        (or (not t1-alive) (not t2-alive))))
+
+(defun game-winner (state)
+    (let* ((m (state-map state))
+           (t1-alive (unit-find m TEAM-1 BASE))
+           (t2-alive (unit-find m TEAM-2 BASE)))
+        (cond ((and t1-alive t2-alive) nil) ; both teams alive -> no winner
+              ((and t1-alive (not t2-alive)) TEAM-1) ; team 1 alive and team 2 not alive -> team 1 winner
+              ((and (not t1-alive) t2-alive) TEAM-2) ; team 1 not alive and team 2 alive -> team 2 winner
+            ; both teams not alive -> tie-break
+            (t (let ((t1-balls (bool->int (unit-find m TEAM-1 BALL)))
+                      (t2-balls (bool->int (unit-find m TEAM-2 BALL)))
+                      (t1-paint (state-paint state TEAM-1))
+                      (t2-paint (state-paint state TEAM-2)))
+                (cond
+                    ; ball count tie-break
+                    ((> t1-balls t2-balls) TEAM-1)
+                    ((< t1-balls t2-balls) TEAM-2)
+                    ; paint amount tie-break
+                    ((> t1-paint t2-paint) TEAM-1)
+                    ((< t1-paint t2-paint) TEAM-2)
+                    ; random tie-break
+                    (t (if (zerop (random 2)) TEAM-1 TEAM-2))))))))
+
+(defun-tco game-loop (state)
+    (if (game-check-end state)
+        (progn (princ (game-winner state)) (terpri))
+        (progn (princ (state-turn state)) (terpri)
+                (game-loop (game-turn state)))))
 
 (defun paintball (map-name)
     (let* ((m (map-load map-name))
