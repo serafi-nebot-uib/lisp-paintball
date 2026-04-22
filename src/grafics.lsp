@@ -272,26 +272,6 @@
                 (square-outline (1- 50) 1)
                 (draw-ball cell 50))
           )
-          
-          (let* ((triangle-size 20)
-                 (half-triangle-size (round (/ triangle-size 2)))
-                 (h-sep 1)
-                 (all-bord-px (* 3 h-sep))
-                 (cateto half-triangle-size)) ; altura (h)
-            (set-color BLACK)
-            (move (+ 9 board-container-size) 249) ; Left vertical guide
-            (drawrel 0 (+ triangle-size h-sep))
-            (move (+ 9 board-container-size triangle-size h-sep) 249) ; Right vertical guide
-            (drawrel 0 (+ triangle-size h-sep))
-            (move (+ 9 board-container-size) 249) ; Lower horizontal guide
-            (drawrel (+ triangle-size (* h-sep 2)) 0)
-            (move (+ 9 board-container-size) (+ 249 triangle-size h-sep)) ; Upper horizontal guide
-            (drawrel (+ triangle-size (* h-sep 2)) 0)
-            (set-color RED)
-            (move (+ 10 board-container-size) 250)
-            (draw-triangle-iso triangle-size 'LPT)
-            (move (+ 10 board-container-size half-triangle-size) 250)
-            (draw-triangle-iso triangle-size 'RPT))
 
           (draw-str (strcat "board-container-size=" board-container-size) (+ 10 board-container-size) 360 1)
           (draw-str (strcat "y-margin: " y-margin)                        (+ 10 board-container-size) 340 2)

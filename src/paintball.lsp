@@ -523,4 +523,4 @@
         (graphics-init m)
         (game-loop state)))
 
-(paintball "whatamiwatching")
+(paintball "lake")
