@@ -10,14 +10,13 @@
     ; (car dades) = ronda
     ; (cadr dades) = equip
     ; etc.
-    ; Exemple: retornam les següents accions:
-    ; 1. Crear una bolla a la posició (2, 3).
-    ; 2. Moure a la posició (4, 5).
-    ; 3. Pintar a la posició (6, 7).
-    ; 4. Escriure a la posició 1 de la memòria compartida el valor 42.
-    ; 5. Escriure a la posició 2 de la memòria compartida el valor (2 3).
-    '((crea-bolla (r (2 3)))
-      (mou ((4 5)))
-      (pinta ((6 7)))
-      (escriu-memoria (1 42))
-      (escriu-memoria (2 (2 3)))))
+    (let* ((unitat (nth 4 dades))
+           (coord (nth 5 dades))
+           (x (car coord))
+           (y (cadr coord)))
+        (cond ((eq unitat 'base)
+               (list (list 'crea-bolla (list 'r (list (1+ x) y)))))
+              ((eq unitat 'bolla)
+               (list (list 'pinta (list (list (1+ x) y)))
+                     (list 'mou (list (list (1+ x) y)))))
+              (t nil))))
