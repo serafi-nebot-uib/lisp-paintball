@@ -54,10 +54,10 @@
     (format nil "~{~A~}" str-list))
 
 ; p = (x y)
-(defun cx (p) (car p))                                   ;coordx
-(defun cy (p) (cadr p))                                  ;coordy
-(defun csum (p x y) (list (+ (car p) x) (+ (cadr p) y))) ;coordsum
-;; (defun ccomp (p1 p2) (equal p1 p2)) ;coordcomp
+;; (defun cx (p) (car p))                                   ; coordx
+;; (defun cy (p) (cadr p))                                  ; coordy
+;; (defun csum (p x y) (list (+ (car p) x) (+ (cadr p) y))) ; coordsum
+;; (defun ccomp (p1 p2) (equal p1 p2))                      ; coordcomp
 
 ; **************************************************
 ; PRIMITIVES
@@ -81,19 +81,19 @@
              (fill-rect-rel w (1- h)))))
              
 (defun draw-square (mida)
-    "Dibuixa un quadrat de mida `mida`, a la posició actual." ;s'ha d'haver situat previament el cursor a la coordenada de inici desitjada
-    (drawrel mida 0)            ; pinta el recorregut de mourerse x=mida y=0 pixels CAP A DALT fent (posActualX posActualY) + (mida, 0)
-    (drawrel 0 mida)            ; pinta el recorregut de mourerse x=0 y=mida pixels CAP A DALT fent (posActualX posActualY) + (0, mida)
-    (drawrel (- mida) 0)        ; pinta el recorregut de mourerse x=-mida y=0 pixels CAP A BAIX fent (posActualX posActualY) + (-mida, 0)
-    (drawrel 0 (- mida)))       ; pinta el recorregut de mourerse x=0 y=-mida pixels CAP A BAIX fent (posActualX posActualY) + (0, -mida)
-
+    "Dibuixa un quadrat de mida `mida`, a la posició actual."
+    (drawrel mida 0)
+    (drawrel 0 mida)
+    (drawrel (- mida) 0)
+    (drawrel 0 (- mida)))
+    
 (defun square-outline (mida &optional (gruix CELL-BORD-THCK))
     "Dibuixa un square-outline de mida `mida` - 1, i de gruix `gruix`, a la posició actual. SENSE FONS"
     (cond ((plusp gruix) ; si gruix > 0
-                (draw-square (- mida 1))    ; dibuixa un quadrat 1 px més petit per fer l'efecte de gruix ;; (draw-square mida)
-                (moverel 1 1)                     ; es mou un pixel en diagonal (més endins del square-outline)
-                (square-outline (- mida 2) (- gruix 1))  ; es crida a si mateix per pintar un cuadrat més intern, va restant fins q gruix <= 0
-                (moverel -1 -1))))         ; quan acaba la crida recursiva va tornant enrere fins a posicionarse on estava inicialment
+           (draw-square (- mida 1))
+           (moverel 1 1)
+           (square-outline (- mida 2) (- gruix 1))
+           (moverel -1 -1))))
 
 ; TODO: variable height triangles [reduction ratio (per line) = height / base]
 (defun draw-triangle-iso (b &optional (ttype 'UPT))
@@ -110,64 +110,20 @@
 
 (defun draw-triangle (c &optional (ttype 'LLT)) ;cateto = altura = base 
     "Dibuixa un triangle rectangle de tipus 'ttype' i costats de mida 'c'"
-    (let ((l (cond 
-                ;;    ((eq ttype 'LLT) (list 0 0 1    0  (- 1) 0    0     0))     ; ◣ Lower Left Triangle
-                ;;    ((eq ttype 'ULT) (list 0 0 1    0  (- 1) 1 (- 1)    0))     ; ◤ Upper Left Triangle
-                ;;    ((eq ttype 'LRT) (list 0 1 0 (- 1)    0  1 (- 1)    0))     ; ◢ Lower Right Triangle
-                ;;    ((eq ttype 'URT) (list 1 1 0 (- 1) (- 1) 0    0  (- 1)))))) ; ◥ Upper Right Triangle
-               ((eq ttype 'LLT) '(0 0 1 0 1 0 0 0))     ; ◣ Lower Left Triangle
-               ((eq ttype 'ULT) '(0 0 1 0 1 1 1 0))     ; ◤ Upper Left Triangle
-               ((eq ttype 'LRT) '(0 1 0 1 0 1 1 0))     ; ◢ Lower Right Triangle
-               ((eq ttype 'URT) '(1 1 0 1 1 0 0 1)))))  ; ◥ Upper Right Triangle
+    (let ((l (cond ((eq ttype 'LLT) '(0 0 1 0 1 0 0 0))     ; ◣ Lower Left Triangle
+                   ((eq ttype 'ULT) '(0 0 1 0 1 1 1 0))     ; ◤ Upper Left Triangle
+                   ((eq ttype 'LRT) '(0 1 0 1 0 1 1 0))     ; ◢ Lower Right Triangle
+                   ((eq ttype 'URT) '(1 1 0 1 1 0 0 1)))))  ; ◥ Upper Right Triangle
         (draw-triangle-internal c (car l) (cadr l) (caddr l) (cadddr l) (nth 4 l) (nth 5 l) (nth 6 l) (nth 7 l))))
         
 (defun draw-triangle-internal (c ay bx by cx cy dy ey offy)
     (cond ((< c 0) nil)
-          (t 
-            ;;  (moverel 0  (+ (* ay c) offy))
-            ;;  (drawrel (* bx c) (* by c))
-            ;;  (moverel (* cx c) (- (* cy c) offy))
-            ;;  (moverel 1  dy)
-            ;;  (draw-triangle-internal (1- c) ay bx by cx cy dy ey offy)
-            ;;  (moverel (- 1) ey)
-             (moverel 0  (+ (* ay c) (- offy)))
+          (t (moverel 0  (+ (* ay c) (- offy)))
              (drawrel (* bx c) (* by c))
              (moverel (* (- cx) c) (- (* (- cy) c) (- offy)))
              (moverel 1  dy)
              (draw-triangle-internal (1- c) ay bx by cx cy dy ey offy)
-             (moverel (- 1) (- ey))
-             )))
-
-                ; ◣ Lower Left Triangle
-                ;; (drawrel 0 c)
-                ;; (moverel 0 (- c))
-                ;; (moverel 1 0)
-                ;; (draw-triangle (1- c))
-                ;; (moverel (- 1) 0)
-
-                ;; ; ◤ Upper Left Triangle
-                ;; (drawrel 0 c)
-                ;; (moverel 0 (- c))
-                ;; (moverel 1 1)
-                ;; (draw-triangle (1- c))
-                ;; (moverel (- 1) (- 1))
-
-                ;; ; ◢ Lower Right Triangle
-                ;; (drawrel c 0)
-                ;; (moverel (- c) 0)
-                ;; (moverel 1 1)
-                ;; (draw-triangle (1- c))
-                ;; (moverel (- 1) (- 1))
-
-                ;; ; ◥ Upper Right Triangle
-                ;; (moverel 0 c)
-                
-                ;; (drawrel c 0)
-                ;; (moverel (- c) (- c))
-                ;; (moverel 1 0)
-                ;; (draw-triangle (1- c))
-                ;; (moverel (- 1) 0)
-
+             (moverel (- 1) (- ey)))))
 
 ; **************************************************
 ; BITMAP/STRING
@@ -224,7 +180,7 @@
     (let* ((map-h (map-height m))
            (map-w (map-width m))
            (cell-ratio (min (/ XLISP-WINDOW-HEIGHT map-h) (/ SB-MIN-WIDTH map-w)))
-           (cell-size (min CELL-MAX-SIZE (max CELL-MIN-SIZE (truncate cell-ratio)))) ; mida del quadrat
+           (cell-size (min CELL-MAX-SIZE (max CELL-MIN-SIZE (truncate cell-ratio)))) ; board cell size
            (board-h (+ (* map-h (- cell-size CELL-BORD-THCK)) CELL-BORD-THCK)) ; (board-h (- (* map-h cell-size) (* (1- map-h) CELL-BORD-THCK)));
            (board-w (+ (* map-w (- cell-size CELL-BORD-THCK)) CELL-BORD-THCK)) ; (board-w (- (* map-w cell-size) (* (1- map-w) CELL-BORD-THCK)));
            (y-margin (floor (/ (- XLISP-WINDOW-HEIGHT board-h) 2)))
@@ -233,7 +189,6 @@
            (board-container-size (if SB-FIXED-WIDTH SB-MIN-WIDTH (min SB-MIN-WIDTH (+ board-w (* x-margin 2)))))
            (xi x-margin)
            (yi (+ (- board-h cell-size) y-margin)))
-
           (cls)
           (draw-map m xi yi 0 cell-size)
           (set-color BLACK)
@@ -242,13 +197,11 @@
           
 
           ; !! TEMPORARY !!
-          (let* (
-                 (half-cs (/ cell-size 2))
+          (let* ((half-cs (/ cell-size 2))
                  (padded-cs (+ cell-size half-cs))
                  (marker-cell-size 18)
                  (marker-bord-thck 1)
                  (cell-inner-size (- (1- marker-cell-size) (* marker-bord-thck 2))))
-
             ;LAB
             (move (+ 10 board-container-size) 90)
             (square-outline marker-cell-size marker-bord-thck)
@@ -266,7 +219,7 @@
             (set-color BLACK)
             (square-outline (1- marker-cell-size) marker-bord-thck) 
             ;; (set-color BLUE) (fill-rect-rel marker-cell-size cell-inner-size)
-            
+
             ; BASE
             (move (+ 10 board-container-size) 70)
             (square-outline marker-cell-size marker-bord-thck)
@@ -303,7 +256,6 @@
             (square-outline (1- marker-cell-size) marker-bord-thck) 
             ;; (set-color BLUE) (fill-rect-rel marker-cell-size cell-inner-size)
 
-
             ;DRAW BALL
             (let* ((cell (list 0 0 0 TEAM-1 0 0 0 0 0))
                     (cell-inner-size (- cell-size (* CELL-BORD-THCK 2))))
@@ -312,16 +264,13 @@
                 (square-outline marker-cell-size marker-bord-thck)
                 (move (+ 11 board-container-size) 111)
                 ;; (set-color GREEN) (fill-rect-rel marker-cell-size cell-inner-size)
-                (draw-ball cell marker-cell-size)
-            )
+                (draw-ball cell marker-cell-size))
 
             (let* ((cell (list 0 0 0 TEAM-2 0 0 0 0 0)))
                 (set-color BLACK)
                 (move (+ 10 board-container-size) 150)
                 (square-outline (1- 50) 1)
-                (draw-ball cell 50)
-            )
-        
+                (draw-ball cell 50))
           )
           
           (let* ((triangle-size 20)
@@ -329,7 +278,6 @@
                  (h-sep 1)
                  (all-bord-px (* 3 h-sep))
                  (cateto half-triangle-size)) ; altura (h)
-
             (set-color BLACK)
             (move (+ 9 board-container-size) 249) ; Left vertical guide
             (drawrel 0 (+ triangle-size h-sep))
@@ -339,13 +287,11 @@
             (drawrel (+ triangle-size (* h-sep 2)) 0)
             (move (+ 9 board-container-size) (+ 249 triangle-size h-sep)) ; Upper horizontal guide
             (drawrel (+ triangle-size (* h-sep 2)) 0)
-            
             (set-color RED)
             (move (+ 10 board-container-size) 250)
             (draw-triangle-iso triangle-size 'LPT)
             (move (+ 10 board-container-size half-triangle-size) 250)
-            (draw-triangle-iso triangle-size 'RPT)
-          )
+            (draw-triangle-iso triangle-size 'RPT))
 
           (draw-str (strcat "board-container-size=" board-container-size) (+ 10 board-container-size) 360 1)
           (draw-str (strcat "y-margin: " y-margin)                        (+ 10 board-container-size) 340 2)
@@ -423,7 +369,6 @@
             ;;    (ul-tile-bcol-w (round (* g 4)))   (ul-tile-bcol-h (round (* g 6)))
             ;;    (ul-tile-bcol-x (round (* g 2)))   (ul-tile-bcol-y (round (* g 10)))
             ;;    (ul-tile-refl-w (round (* g 6)))   (ul-tile-refl-h tile-size)
-               
             ;;    (lr-tile-bcol-w (round (* g 6)))   (lr-tile-bcol-h tile-size)
             ;;    (lr-tile-bcol-x tile-size)         (lr-tile-bcol-y 0)
             ;;    (lr-tile-refl-x (round (* g 14)))  (lr-tile-refl-y 0)
@@ -468,7 +413,7 @@
            (dist-diag-sep (round (* g 9)))
            (spacing (round (* g 2)))
            (spacing4 (round (* g 4)))
-           (border-type 2) ; 0: None | 1: Single | 2: Double
+           (border-type 2) ; 0: None | 1: Single | 2: Double ;TEMPORARY
 
         ;;    (line-thck (round (* cell-size 0.0625))) 
         ; V1 Thicker Background color strip
@@ -503,38 +448,36 @@
            (cent-l-triang-col (if ver1 ball-backg-col  ball-paint-col1))
            (cent-r-triang-col (if ver1 ball-backg-col  ball-paint-col2))
            (lsided-triang-col (if ver1 ball-paint-col1 ball-backg-col))
-           (rsided-triang-col (if ver1 ball-paint-col2 ball-backg-col))
-          )
+           (rsided-triang-col (if ver1 ball-paint-col2 ball-backg-col)))
+
         ;; (princ (strcat "dball cs=" base-size)) (terpri) (princ (strcat "g=" g)) (terpri)
-        
-        (cond ((>= border-type 1)  ;V4.3 Simplified (Doesn't return to origin coordinates)
+
+        (cond ((>= border-type 1)
             (set-color team-col)
-            (moverel (- diag-size-std 1) 0) ; -1
+            (moverel (- diag-size-std 1) 0)
             (drawrel (- diag-size-std) diag-size-std)
-            (moverel 1 spacing) ; +1
+            (moverel 1 spacing)
             (drawrel diag-size-std diag-size-std)
-            (moverel (+ diag-size-std spacing (- 1)) (- diag-size-std)) ; -1
+            (moverel (+ diag-size-std spacing (- 1)) (- diag-size-std))
             (drawrel (- diag-size-std) diag-size-std)
-            (moverel 1 (- (+ (* diag-size-std 2) spacing))) ; +1
+            (moverel 1 (- (+ (* diag-size-std 2) spacing)))
             (drawrel diag-size-std diag-size-std)
             (moverel (- (+ (* diag-size-std 2) spacing)) (- diag-size-std))
-            (cond ((>= border-type 2) ; Double border
-                (moverel (- diag-size-sm 1) 0) ; -1
+            (cond ((>= border-type 2) 
+                (moverel (- diag-size-sm 1) 0) 
                 (drawrel (- diag-size-sm) diag-size-sm)
-                (moverel 1 spacing4); +1
+                (moverel 1 spacing4)
                 (drawrel diag-size-sm diag-size-sm)
-                (moverel (+ diag-size-sm spacing4 (- 1)) (- diag-size-sm)) ; -1
+                (moverel (+ diag-size-sm spacing4 (- 1)) (- diag-size-sm))
                 (drawrel (- diag-size-sm) diag-size-sm)
-                (moverel  1 (- (+ (* diag-size-sm 2) spacing4))) ; +1
+                (moverel  1 (- (+ (* diag-size-sm 2) spacing4)))
                 (drawrel diag-size-sm diag-size-sm)
                 (moverel (- (+ (* diag-size-sm 2) spacing4)) (- diag-size-sm))))))
-                    
         (set-color ball-backg-col) ; Fill Ball with background color
         (draw-triangle-iso base-size 'LPT)
         (moverel (round (/ base-size 2)) 0)
         (draw-triangle-iso base-size 'RPT)
         (moverel (- (round (/ base-size 2))) 0)
-
         (cond (ver1 (set-color lsided-triang-col) ; 1st color paint
                     (moverel tile1-x tile1-y)
                     (draw-triangle-iso tiles-h 'LPT)
@@ -543,28 +486,24 @@
                     (moverel tile2-x tile2-y)
                     (draw-triangle-iso tiles-h 'RPT)
                     (moverel (- tile2-x) (- tile2-y))))
-
-        (set-color cent-l-triang-col) ;Central triangles 
+        (set-color cent-l-triang-col) ; Central triangles 
         (moverel cent-triang-l-x cent-triang-l-y)
         (draw-triangle-iso cent-triang-h 'LPT)
         (moverel (- cent-triang-l-x) (- cent-triang-l-y))
         (set-color cent-r-triang-col)
         (moverel cent-triang-r-x cent-triang-r-y)
         (draw-triangle-iso cent-triang-h 'RPT)
-        (moverel (- cent-triang-r-x) (- cent-triang-r-y))
-    )
-)
+        (moverel (- cent-triang-r-x) (- cent-triang-r-y))))
 
-;; (load "colors.lsp")
-; TODO: 
-;       PROPORTIONAL COLOR FILTER
+;; Move all file colors to an additional file? (load "colors.lsp")
+; TODO: PROPORTIONAL COLOR FILTER
 (defun draw-base (cell cell-size)
     (let* ((max-inner-sp (- CELL-MAX-SIZE (* CELL-BORD-THCK 2)))
            (base-size (max 4 (- cell-size (* CELL-BORD-THCK 2))))
            (g (/ base-size max-inner-sp)) ; base-size / reference-size ratio (decimal)
            (hires-icon (> base-size 8))
-           (base-team1 (cell-owned-by cell TEAM-1))         ; Equip 2 color base - (fer-lo més saturat)   
-           (BASE-COL1 (if base-team1 '(118 118 0)   '(0 117 118))) ; Darkest
+           (base-team1 (cell-owned-by cell TEAM-1))
+           (BASE-COL1 (if base-team1 '(118 118 0)   '(0 117 118)))   ; Darkest
            (BASE-COL2 (if base-team1 '(189 189 0)   '(0 188 189)))
            (BASE-COL3 (if base-team1 '(229 229 0)   '(0 228 229)))
            (BASE-COL4 (if base-team1 '(240 240 125) '(124 240 240)))
@@ -583,11 +522,11 @@
                   (dist-cent-bg-sq (round (* g 3))))
                 (set-color BASE-COL3)   ; background square
                 (fill-rect-rel base-size base-size)
-                (set-color BASE-COL5) ; clearest square
+                (set-color BASE-COL5)   ; clearest square
                 (moverel dist-cent-bg-sq dist-cent-bg-sq)
                 (fill-rect-rel cent-bg-sq cent-bg-sq)
                 (moverel (- dist-cent-bg-sq) (- dist-cent-bg-sq))
-                (set-color BASE-COL4)   ; central square ;(set-color '(237 237 122)) ;(set-color '(234 206 9)) 
+                (set-color BASE-COL4)   ; central square
                 (moverel dist-cent-sm-sq dist-cent-sm-sq)
                 (fill-rect-rel cent-sm-sq cent-sm-sq)
                 (moverel (- dist-cent-sm-sq) (- dist-cent-sm-sq))
@@ -608,9 +547,7 @@
                 (fill-rect-rel corn-sm-sq corn-sm-sq)
                 (moverel 0 (- dist-corn-sm-sq))
                 (fill-rect-rel corn-sm-sq corn-sm-sq)
-                (moverel (- dist-corn-sm-sq) 0)
-            )
-
+                (moverel (- dist-corn-sm-sq) 0))
             ; Simple Version
             (let ((corn-sq (round (* cell-size 0.25)))
                   (cent-sq (round (* cell-size 0.50)))
@@ -618,7 +555,7 @@
                   (dist-cent-sq (round (* g 4))))
                 (set-color BASE-COL2)     ; background square
                 (fill-rect-rel base-size base-size)
-                (set-color BASE-COL4)   ; central square
+                (set-color BASE-COL4)     ; central square
                 (moverel dist-cent-sq dist-cent-sq)
                 (fill-rect-rel cent-sq cent-sq)
                 (moverel (- dist-cent-sq) (- dist-cent-sq))

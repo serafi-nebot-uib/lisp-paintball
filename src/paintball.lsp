@@ -11,7 +11,7 @@
 ; (load 'tco)    ; https://github.com/antoni-oliver/defun-tco
 
 ;; Altres fitxers de la pràctica:
-; (load "grafics.lsp")
+(load "grafics.lsp")
 
 (load "tco.lsp")
 
@@ -115,6 +115,7 @@
         (cons (map-init-row (nth y m) 0 y (map-width m)) (map-init-rows m (1+ y)))
         nil))
 
+; Cada cel·la té com a id la posició lineal (fila*amplada + columna) (y*board_width + x)
 (defun map-init-row (row x y w)
     (if (< x w)
         (cons (map-init-cell (nth x row) (+ x (* y w))) (map-init-row row (1+ x) y w))
@@ -146,6 +147,7 @@
     "Calcula el nombre de cel·les del mapa m que compleixen amb la condició retornada per fun."
     (sum (flatten (mapcar (lambda (row) (bool->int (mapcar fun row))) m))))
 
+; "Aplica una funció a cada cel·la del mapa m"
 (defun map-apply (m fun) (mapcar (lambda (row) (mapcar fun row)) m))
 
 ; *************************************************
@@ -501,10 +503,13 @@
                     (t (if (zerop (random 2)) TEAM-1 TEAM-2))))))))
 
 (defun-tco game-loop (state)
-    (if (game-check-end state)
-        (progn (princ (game-winner state)) (terpri))
-        (progn (princ (state-turn state)) (terpri)
-                (game-loop (game-turn state)))))
+    ;; (if (game-check-end state)
+    ;;     (progn (princ (game-winner state)) (terpri))
+    ;;     (progn (princ (state-turn state)) (terpri)
+    ;;             (game-loop (game-turn state)))))
+    (if (game-check-end state) 
+        (game-winner state)
+        (progn (state-turn state) (game-loop (game-turn state)))))
 
 (defun paintball (map-name)
     (let* ((m (map-load map-name))
@@ -515,6 +520,7 @@
         ; (color 0 0 0 255 255 255)
         ; (mode 0 0 640 375)
         ; enter game loop
+        (graphics-init m)
         (game-loop state)))
 
-(paintball "huge")
+(paintball "whatamiwatching")
