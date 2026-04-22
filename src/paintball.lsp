@@ -12,7 +12,6 @@
 
 ;; Altres fitxers de la pràctica:
 (load "grafics.lsp")
-
 (load "tco.lsp")
 
 ; TODO: rename agents to author names
@@ -523,4 +522,4 @@
         (graphics-init m)
         (game-loop state)))
 
-(paintball "lake")
+(paintball "tiny")
