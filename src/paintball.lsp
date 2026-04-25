@@ -14,7 +14,7 @@
 (load "grafics.lsp")
 (load "tco.lsp")
 
-; TODO: rename agents to author names
+; TODO: canviar els noms dels fitxers d'agents pel codi d'aula dels autors
 (load "agent-sng656.lsp")
 (load "agent-xyz999.lsp")
 
@@ -22,42 +22,71 @@
 ; CONSTANTS
 ; **************************************************
 
+; pintura: quantitat inicial de cada equip i increments per torn (base i per laboratori capturat)
 (defconstant PAINT-INIT                 200)
 (defconstant PAINT-INC-TURN             2)
 (defconstant PAINT-INC-LAB              1)
+
+; identificadors dels dos equips
 (defconstant TEAM-1                     'e1)
 (defconstant TEAM-2                     'e2)
+
+; tipus de casella i d'element del mapa
 (defconstant WATER                      'aigua)
 (defconstant LAND                       'terra)
 (defconstant LAB                        'lab)
 (defconstant BASE                       'base)
 (defconstant BALL                       'bolla)
 (defconstant UNIT-TYPES                 (list BASE BALL))
+
+; rangs de visió (d²) per a cada tipus d'unitat
 (defconstant VISION-BASE                64)
 (defconstant VISION-BALL                20)
+
+; colors primaris de la pintura (R, G, B)
 (defconstant RGB-R                      'r)
 (defconstant RGB-G                      'g)
 (defconstant RGB-B                      'b)
 (defconstant RGB                        (list RGB-R RGB-G RGB-B))
+
+; paràmetres de l'acció moure d'una bolla:
+;   TR:              cost base de cooldown afegit per cada moviment
+;   TR-DIAG:         multiplicador de cost si el moviment és diagonal (~√2)
+;   TR-DIFF-COLOR:   multiplicador de cost si la cel·la destí no és del color de la bolla
+;   RANGE:           rang màxim del moviment (d²) — 8 cel·les adjacents
 (defconstant BALL-MOVE-TR               1)
 (defconstant BALL-MOVE-TR-DIAG          1.4142)
 (defconstant BALL-MOVE-TR-DIFF-COLOR    3)
 (defconstant BALL-MOVE-RANGE            2)
+
+; paràmetres de l'acció pintar d'una bolla:
+;   TR:              cost base de cooldown afegit per cada acció de pintar
+;   RANGE:           rang màxim per a l'acció (d²)
+;   TR-DIFF-COLOR:   multiplicador de cost si la cel·la origen no és del color de la bolla
 (defconstant BALL-PAINT-TR              3)
 (defconstant BALL-PAINT-RANGE           5)
 (defconstant BALL-PAINT-TR-DIFF-COLOR   3)
+
+; paràmetres de l'acció crear bolla d'una base:
+;   COST:    pintura consumida per crear una bolla nova
+;   RANGE:   rang màxim de creació respecte la base (d²) — 8 cel·les adjacents
 (defconstant BASE-CREATE-COST           50)
 (defconstant BASE-CREATE-RANGE          2)
+
+; identificadors de les accions que retornen els agents (símbols emprats per l'enunciat)
 (defconstant ACTION-CREATE-BALL         'CREA-BOLLA)
 (defconstant ACTION-MOVE                'MOU)
 (defconstant ACTION-PAINT               'PINTA)
 (defconstant ACTION-MEM-WRITE           'ESCRIU-MEMORIA)
 
+; nombre màxim de torns abans d'aplicar el desempat (evita partides infinites)
+(defconstant TURN-LIMIT                 1500)
+
 ; **************************************************
 ; UTILITATS
 ; **************************************************
 
-; canvia el valor a la posicío n de la llista lst pel valor val
+; canvia el valor a la posició n de la llista lst pel valor val
 (defun list-set (lst n val)
     (if (zerop n)
         (cons val (cdr lst))
@@ -69,7 +98,7 @@
           ((atom lst) (list lst))
           (t (append (flatten (car lst)) (flatten (cdr lst))))))
 
-; operacions artimètiques i lògiques bàsiques sobre llistes de N elements 
+; operacions aritmètiques i lògiques bàsiques sobre llistes de N elements 
 ; les funcions només són un "mapping" d'una operació bàsica:
 ;     es podria escriure manualment cada una d'aquestes operacions a totes les parts del codi
 ;     però d'aquesta manera es poden expressar operacions de forma curta i clara
@@ -83,16 +112,17 @@
 (defun lte   (a b) (mapcar '<= a b))
 (defun gte   (a b) (mapcar '>= a b))
 (defun pow   (a e) (mapcar (lambda (x) (expt x e)) a))
-(defun sum   (a)   (reduce '+ a))
-(defun prod  (a)   (reduce '* a))
+(defun sum   (a)   (reduce '+ a :initial-value 0))
+(defun prod  (a)   (reduce '* a :initial-value 1))
 
 ; rèplica de la funció zip() de python: agrupa els elements de múltiples llistes per posició
 ; (zip '(1 2 3) '(a b c)) => ((1 a) (2 b) (3 c))
 ; l és una llista de llistes; apply l'expandeix perquè mapcar rebi cada llista com a argument separat
 ; mapcar itera totes les llistes en paral·lel i aplica #'list a cada grup d'elements de la mateixa posició
-(defun zip   (&rest l) (apply #'mapcar #'list l))
+; (defun zip   (&rest l) (apply #'mapcar #'list l))
 
-; distància euclidiana entre a i b
+; distància euclidiana al quadrat (d²) entre a i b
+; tots els rangs i llindars del joc s'expressen com a d² per evitar arrels quadrades
 (defun dist  (a b) (sum (pow (sub a b) 2)))
 
 ; genera una llista en el rang [s e]
@@ -153,24 +183,26 @@
                                                      (cell-unit-tr-move cell)))
                     (t (list LAND (cell-color cell)))))))
 
-; retorna l'alçada i l'amplada del mapa, i comprova si (x, y) és dins dels seus límits
+; retorna l'alçada i l'amplada del mapa, i comprova si la coordenada xy és dins dels seus límits
 (defun map-height (m) (length m))
 (defun map-width  (m) (length (car m)))
-(defun map-bounds (m x y) (and (>= x 0) (>= y 0) (< x (map-width m)) (< y (map-height m))))
+(defun map-bounds (m xy)
+    (let ((x (car xy)) (y (cadr xy)))
+        (and (>= x 0) (>= y 0) (< x (map-width m)) (< y (map-height m)))))
 
-; llegeix o escriu la cel·la a la posició (x, y) del mapa m
+; llegeix o escriu la cel·la a la posició xy del mapa m
 ; si val és nil, retorna la cel·la actual; si no, retorna el mapa actualitzat amb el nou valor
-(defun map-cell (m x y &optional val)
-    (if val (list-set m y (list-set (nth y m) x val))
-            (nth x (nth y m))))
+(defun map-cell (m xy &optional val)
+    (let ((x (car xy)) (y (cadr xy)))
+        (if val (list-set m y (list-set (nth y m) x val))
+                (nth x (nth y m)))))
 
-; aplica múltiples actualitzacions al mapa m en seqüència; cada upd té format (x y nou-valor)
+; aplica múltiples actualitzacions al mapa m en seqüència; cada upd té format (xy nou-valor)
 (defun map-update (m &rest upd)
-    (reduce (lambda (m p) (apply #'map-cell (cons m p))) upd :initial-value m))
+    (reduce (lambda (m p) (map-cell m (car p) (cadr p))) upd :initial-value m))
 
 ; calcula el nombre de cel·les del mapa m que compleixen la condició retornada per fun
-(defun map-count (m fun)
-    (sum (flatten (mapcar (lambda (row) (bool->int (mapcar fun row))) m))))
+(defun map-count (m fun) (sum (mapcar (lambda (row) (count-if fun row)) m)))
 
 ; aplica una funció a cada cel·la del mapa m, retornant un mapa nou amb els resultats
 (defun map-apply (m fun) (mapcar (lambda (row) (mapcar fun row)) m))
@@ -180,7 +212,7 @@
 ; **************************************************
 
 #|
-    Cell structure
+    Estructura d'una cel·la
         Aigua: (AIGUA)
         Terra: (TERRA COLOR)
           Lab: (TERRA COLOR LAB   EQUIP)
@@ -189,7 +221,7 @@
 |#
 
 ; accessors de cel·la: segueixen el patró (camp cell) per llegir i (camp cell nou-valor) per escriure
-; retornen sempre una nova cel·la (sense mutar), excepte cell-unit-paint que elimina duplicats
+; retornen sempre una nova cel·la (sense mutar)
 (defun cell-type          (cell &optional new) (if new (list-set cell 0 new) (nth 0 cell)))
 (defun cell-color         (cell &optional new) (if new (list-set cell 1 new) (nth 1 cell)))
 (defun cell-unit          (cell &optional new) (if new (list-set cell 2 new) (nth 2 cell)))
@@ -232,18 +264,22 @@
 ;   - si és un lab, el captura per a l'equip team
 ;   - si és una base o bolla, afegeix el color a la llista de colors pintats i l'elimina si en té els tres
 ;   - en qualsevol cas, actualitza el color de la casella
+; pre: cell ha de ser de tipus terra; les cel·les d'aigua no es poden pintar
 (defun cell-apply-paint (team cell color)
-    (let ((cell-new (cond
-        ; cell unit is lab -> capture for the team
-        ((cell-has-lab cell) (cell-unit-team cell team))
-        ; cell unit is base or ball -> add color to painted list & check if it should be eliminated
-        ((or (cell-has-base cell) (cell-has-ball cell))
-         (let ((paint (cons color (cell-unit-paint cell))))
-             (if (paint-check-all paint)
-                 (subseq cell 0 2) ; full of paint -> eliminate unit
-                 (cell-unit-paint cell paint)))) ; not full of paint -> update cell with new color
-        (t cell))))
-    (cell-color cell-new color)))
+    (if (cell-type-water cell)
+        cell
+        (let ((cell-new
+                (cond
+                    ; unitat és un lab -> captura per a l'equip atacant
+                    ((cell-has-lab cell) (cell-unit-team cell team))
+                    ; unitat és una base o una bolla -> afageix color a pintat i comprova si s'ha d'eliminar
+                    ((or (cell-has-base cell) (cell-has-ball cell))
+                        (let ((paint (cons color (cell-unit-paint cell))))
+                            (if (paint-check-all paint)
+                                (subseq cell 0 2) ; conté tota la pintura -> eliminar unitat
+                                (cell-unit-paint cell paint)))) ; no conté tota la pintura -> actualitza la cel·la amb el color nou
+                    (t cell))))
+        (cell-color cell-new color))))
 
 ; **************************************************
 ; GAME STATE
@@ -267,19 +303,8 @@
 (defun state-next-id   (s &optional new) (if new (list-set s 6 new) (nth 6 s)))
 
 ; converteix entre coordenades internes del mapa i coordenades desplaçades visibles pels agents
-(defun coord-valid (xy)
-    (and (consp xy) (integerp (car xy)) (consp (cdr xy)) (integerp (cadr xy))))
-
-(defun coord-shift (state x y)
-    (list (+ x (state-dx state)) (+ y (state-dy state))))
-
-(defun coord-unshift (state xy)
-    (if (coord-valid xy)
-        (list (- (car xy) (state-dx state)) (- (cadr xy) (state-dy state)))
-        nil))
-
-(defun coord-bounds (m xy)
-    (and (coord-valid xy) (map-bounds m (car xy) (cadr xy))))
+(defun coord-shift (state xy) (list (+ (car xy) (state-dx state)) (+ (cadr xy) (state-dy state))))
+(defun coord-unshift (state xy) (list (- (car xy) (state-dx state)) (- (cadr xy) (state-dy state))))
 
 ; **************************************************
 ; UNITS
@@ -307,23 +332,23 @@
 ; format: (ronda equip pintura id-unitat tipus-unitat coordenada colors-pintat color-propi
 ;          tr-pintar tr-moure visió memòria-compartida)
 ; les coordenades s'envien desplaçades (x+dx, y+dy) per ocultar els límits reals del mapa
-(defun unit-info (state team x y)
+(defun unit-info (state team xy)
     (let* ((turn (state-turn state))
            (m (state-map state))
-           (cell (map-cell m x y))
+           (cell (map-cell m xy))
            (paint (state-paint state team))
            (id (cell-unit-id cell))
            (unit (cell-unit cell))
-           (coord (coord-shift state x y))
-           (unit-color (cell-unit-paint cell))
-           (ball-color (cell-unit-color cell))
+           (coord (coord-shift state xy))
+           (paint-list (cell-unit-paint cell))
+           (own-color (cell-unit-color cell))
            (tr-paint (cell-unit-tr-paint cell))
            (tr-move (cell-unit-tr-move cell))
            (vision-range (if (eq unit BASE) VISION-BASE VISION-BALL))
-           (vis-coords (unit-vision m x y vision-range))
-           (vis (mapcar (lambda (xy) (unit-vision-format state (car xy) (cadr xy))) vis-coords))
+           (vis-coords (unit-vision m xy vision-range))
+           (vis (mapcar (lambda (vxy) (unit-vision-format state vxy)) vis-coords))
            (mem nil))
-        (list turn team paint id unit coord unit-color ball-color tr-paint tr-move vis mem)))
+        (list turn team paint id unit coord paint-list own-color tr-paint tr-move vis mem)))
 
 ; crida l'agent de l'equip team amb la informació de la unitat i retorna la llista d'accions decidides
 (defun unit-agent (team info)
@@ -331,53 +356,57 @@
         (agent-sng656 info)
         (agent-xyz999 info)))
 
-; ESTRUCTURA ACCIÓ
-; cada acció és una llista de dos elements: (name args)
-;    - name: el nom de l'acció
-;    - args: llista d'arguments de l'acció
-; acada unitat pot realitzar multiples accions per a cada ronda (llist d'accions)
-; 
-; TIPUS ACCIONS
+; ESTRUCTURA D'UNA ACCIÓ
+; cada acció és una llista de dos elements: (nom arguments)
+;    - nom:        el símbol identificador de l'acció
+;    - arguments:  llista d'arguments de l'acció
+; cada unitat pot retornar múltiples accions per torn (llista d'accions)
+;
+; TIPUS D'ACCIONS
 ;    (crea-bolla (color (x y)))
 ;    (pinta ((x y)))
 ;    (mou ((x y)))
-;    (escriu-memoria (new-memory-value))
+;    (escriu-memoria (nou-valor-memoria))
 ;
-; RESULTAT ACCIÓ (RETORN FUNCIONA ACCIÓ)
+; RESULTAT D'UNA ACCIÓ (valor de retorn de la funció d'acció)
 ;   1r: l'estat resultant d'aplicar l'acció
-;   2n: una llista amb totes les actualitzacions aplicades al mapa; format de cada actualització: (x y nou-valor-cela)
+;   2n: llista d'actualitzacions aplicades al mapa; cada actualització té format (xy nova-cel·la)
 
 ; processa la llista d'accions d'una unitat aplicant-les en seqüència a l'estat
 ; retorna (estat-final llista-actualitzacions-del-mapa)
-(defun unit-actions (state team xy actions &optional updates)
+; el flag created limita una base a una sola creació de bolla per torn (t_r^create = 1)
+(defun unit-actions (state team xy actions &optional updates created)
     (if actions
         (let* ((action (car actions))
-                (name (car action))
-                (args (cadr action))
-                (result (cond
+               (name (car action))
+               (args (cadr action))
+               (skip-create (and created (eq name ACTION-CREATE-BALL)))
+               (result (cond
+                    (skip-create (list state nil))
                     ((eq name ACTION-MOVE) (unit-act-move state team xy (car args)))
                     ((eq name ACTION-PAINT) (unit-act-paint state team xy (car args)))
                     ((eq name ACTION-CREATE-BALL) (unit-act-create-ball state team xy (cadr args) (car args)))
                     ((eq name ACTION-MEM-WRITE) (unit-act-write-mem state team (car args)))
                     (t (list state nil))))
-                (next-state (car result))
-                (next-updates (append updates (cadr result))))
-            (unit-actions next-state team xy (cdr actions) next-updates)))
-        (list state updates))
+               (next-state (car result))
+               (next-updates (append updates (cadr result)))
+               ; marca created si una crea-bolla ha tingut èxit (ha produït actualitzacions)
+               (next-created (or created
+                                 (and (eq name ACTION-CREATE-BALL) (cadr result) t))))
+            (unit-actions next-state team xy (cdr actions) next-updates next-created))
+        (list state updates)))
 
-; TODO: implement memory
+; TODO: implementar la memòria compartida
 (defun unit-act-write-mem (state team value) (list state nil))
 
 ; mou la bolla de src a dst si l'acció és vàlida (bolla pròpia, cooldown 0, dst lliure i dins del rang)
 ; el cost de moviment augmenta si el moviment és diagonal o si dst no és del color de la bolla
 (defun unit-act-move (state team src dst)
     (let* ((m (state-map state))
-           (ux (car src)) (uy (cadr src))
            (target (coord-unshift state dst))
-           (src-cell (map-cell m ux uy)))
-        (if (coord-bounds m target)
-            (let* ((tx (car target)) (ty (cadr target))
-                   (dst-cell (map-cell m tx ty))
+           (src-cell (map-cell m src)))
+        (if (map-bounds m target)
+            (let* ((dst-cell (map-cell m target))
                    (d (dist src target)))
                 (if (and (cell-has-ball src-cell)
                          (cell-owned-by src-cell team)
@@ -399,8 +428,8 @@
                                           ball-color
                                           (cell-unit-tr-paint src-cell)
                                           tr-move-new))
-                            (src-upd (list ux uy src-new))
-                            (dst-upd (list tx ty dst-new))
+                            (src-upd (list src src-new))
+                            (dst-upd (list target dst-new))
                             (state-next (state-map state (map-update m src-upd dst-upd))))
                         (list state-next (list src-upd dst-upd)))
                     ; l'acció és invàlida, no s'aplica cap canvi al mapa
@@ -411,12 +440,10 @@
 ; el cost de pintar es triplica si src no és del color de la bolla
 (defun unit-act-paint (state team src dst)
     (let* ((m (state-map state))
-           (ux (car src)) (uy (cadr src))
            (target (coord-unshift state dst))
-           (src-cell (map-cell m ux uy)))
-        (if (coord-bounds m target)
-            (let* ((tx (car target)) (ty (cadr target))
-                   (dst-cell (map-cell m tx ty))
+           (src-cell (map-cell m src)))
+        (if (map-bounds m target)
+            (let* ((dst-cell (map-cell m target))
                    (d (dist src target)))
                 (if (and (cell-has-ball src-cell)
                          (cell-owned-by src-cell team)
@@ -429,13 +456,26 @@
                            (tr-paint-new (+ (cell-unit-tr-paint src-cell)
                                             (if (eq src-color ball-color)
                                               BALL-PAINT-TR
-                                              (* BALL-PAINT-TR BALL-PAINT-TR-DIFF-COLOR))))
-                           (src-cell-new (cell-unit-tr-paint src-cell tr-paint-new))
-                           (dst-cell-new (cell-apply-paint team dst-cell ball-color))
-                           (src-upd (list ux uy src-cell-new))
-                           (dst-upd (list tx ty dst-cell-new))
-                           (state-next (state-map state (map-update m src-upd dst-upd))))
-                        (list state-next (list src-upd dst-upd)))
+                                              (* BALL-PAINT-TR BALL-PAINT-TR-DIFF-COLOR)))))
+                        (if (equal src target)
+                            ; src i dst son la mateixa cel·la: combinar les dues transformacions
+                            ; (cooldown + pintura) en una sola actualització, perquè dues
+                            ; actualitzacions sobre la mateixa posició es sobreescriurien
+                            (let* ((cell-painted (cell-apply-paint team src-cell ball-color))
+                                   ; només actualitza el cooldown si la bolla no s'ha destruit
+                                   (cell-final (if (cell-has-ball cell-painted)
+                                                   (cell-unit-tr-paint cell-painted tr-paint-new)
+                                                   cell-painted))
+                                   (upd (list src cell-final))
+                                   (state-next (state-map state (map-update m upd))))
+                                (list state-next (list upd)))
+                            ; src i dst diferents: dues actualitzacions independents
+                            (let* ((src-cell-new (cell-unit-tr-paint src-cell tr-paint-new))
+                                   (dst-cell-new (cell-apply-paint team dst-cell ball-color))
+                                   (src-upd (list src src-cell-new))
+                                   (dst-upd (list target dst-cell-new))
+                                   (state-next (state-map state (map-update m src-upd dst-upd))))
+                                (list state-next (list src-upd dst-upd)))))
                     ; l'acció és invàlida, no s'aplica cap canvi al mapa
                     (list state nil)))
             (list state nil))))
@@ -443,13 +483,11 @@
 ; crea una nova bolla de color color a dst a partir de la base a src, descomptant el cost de pintura
 (defun unit-act-create-ball (state team src dst color)
     (let* ((m (state-map state))
-           (ux (car src)) (uy (cadr src))
            (target (coord-unshift state dst))
-           (src-cell (map-cell m ux uy))
+           (src-cell (map-cell m src))
            (paint (state-paint state team)))
-        (if (coord-bounds m target)
-            (let* ((tx (car target)) (ty (cadr target))
-                   (dst-cell (map-cell m tx ty))
+        (if (map-bounds m target)
+            (let* ((dst-cell (map-cell m target))
                    (d (dist src target)))
                 (if (and (cell-has-base src-cell)
                          (cell-owned-by src-cell team)
@@ -461,7 +499,7 @@
                     ; l'acció es vàlida, aplica els canvis al mapa
                     (let* ((next-id (state-next-id state))
                            (dst-new (list LAND (cell-color dst-cell) BALL team next-id (list color) color 0 0))
-                           (upd (list tx ty dst-new))
+                           (upd (list target dst-new))
                            (s1 (state-map state (map-update m upd)))
                            (s2 (state-paint s1 team (- paint BASE-CREATE-COST)))
                            (s3 (state-next-id s2 (1+ next-id))))
@@ -486,50 +524,62 @@
 ;    ......#########......
 ;    .....................
 
-(defun unit-vision (m cx cy r)
-    (let* ((off (truncate (sqrt (float r))))
+(defun unit-vision (m c r)
+    (let* ((cx (car c))
+           (cy (cadr c))
+           (off (truncate (sqrt (float r))))
            (w (map-width m))
            (h (map-height m))
-           (src (list cx cy))
-           ; calculate the bounds of the inner map & clip them to the outside of the total map
+           ; calcula els límits del quadrat interior i els retalla als límits del mapa
            (min-x (max 0 (- cx off)))
            (min-y (max 0 (- cy off)))
            (max-x (min (- w 1) (+ cx off)))
            (max-y (min (- h 1) (+ cy off)))
-           ; generate all of the coordinates for the inner map (entire square)
+           ; genera totes les coordenades del quadrat interior
            (coord-range (cartesian (range min-x max-x) (range min-y max-y))))
-        ; filter all of the inner map coordinates that are visible with range r
-        (remove-if (lambda (dst) (> (dist src dst) r)) coord-range)))
+        ; filtra les coordenades visibles dins del rang r (distància al quadrat)
+        (remove-if (lambda (dst) (> (dist c dst) r)) coord-range)))
 
 ; formata la informació d'una cel·la visible per enviar-la a l'agent
-; format: (coordenada tipus-casella color-casella tipus-element equip colors-pintat color-propi tr-pintar tr-moure)
-(defun unit-vision-format (state x y)
+; el format és de longitud variable segons el contingut de la cel·la (veure enunciat):
+;        aigua: (coord AIGUA)
+;   terra buida: (coord TERRA color)
+;          lab: (coord TERRA color LAB equip)
+;         base: (coord TERRA color BASE equip colors-pintat)
+;        bolla: (coord TERRA color BOLLA equip colors-pintat color-propi tr-pintar tr-moure)
+; les coordenades s'envien desplaçades (x+dx, y+dy) per ocultar els límits reals del mapa
+(defun unit-vision-format (state xy)
     (let* ((m (state-map state))
-           (cell (map-cell m x y)))
-         (list (coord-shift state x y)
-          (cell-type cell)
-          (cell-color cell)
-          (cell-unit cell)
-          (cell-unit-team cell)
-          (cell-unit-paint cell)
-          (cell-unit-color cell)
-          (cell-unit-tr-paint cell)
-          (cell-unit-tr-move cell))))
+           (cell (map-cell m xy))
+           (coord (coord-shift state xy)))
+        (cond ((cell-type-water cell) (list coord WATER))
+              ((cell-has-lab cell)
+                  (list coord LAND (cell-color cell) LAB (cell-unit-team cell)))
+              ((cell-has-base cell)
+                  (list coord LAND (cell-color cell) BASE (cell-unit-team cell)
+                        (cell-unit-paint cell)))
+              ((cell-has-ball cell)
+                  (list coord LAND (cell-color cell) BALL (cell-unit-team cell)
+                        (cell-unit-paint cell)
+                        (cell-unit-color cell)
+                        (cell-unit-tr-paint cell)
+                        (cell-unit-tr-move cell)))
+              (t (list coord LAND (cell-color cell))))))
 
 ; **************************************************
 ; CONTROLLER
 ; **************************************************
 
+; incrementa la pintura de l'equip team: 2 per torn més 1 per cada laboratori capturat
 (defun game-paint-increase (s team)
-    ; incrementa la pintura de l'equip team: 2 per torn més 1 per cada laboratori capturat
     (let* ((m (state-map s))
            (labs (map-count m (lambda (cell) (cell-lab-team cell team))))
            (inc (+ PAINT-INC-TURN (* PAINT-INC-LAB labs)))
            (curr (state-paint s team)))
           (state-paint s team (+ curr inc))))
 
+; decrementa en 1 els cooldowns de totes les bolles de l'equip team (tr-pintar i tr-moure)
 (defun game-tr-decrease (s team)
-    ; decrementa en 1 els cooldowns de totes les bolles de l'equip team (tr-pintar i tr-moure)
     (state-map s (map-apply (state-map s)
                             (lambda (cell) (if (and (cell-has-ball cell) (cell-owned-by cell team))
                                                (cell-ball-tr-decrease cell)
@@ -549,68 +599,71 @@
 (defun game-turn (state)
     (let* ((turn (state-turn state))
            (team (if (evenp turn) TEAM-1 TEAM-2))
-           ; 1. add paint increase
+           ; 1. incrementa la pintura de l'equip actiu
            (s1 (game-paint-increase state team))
-           ; 2. decrement cooldowns
+           ; 2. decrementa els cooldowns de les bolles de l'equip actiu
            (s2 (game-tr-decrease s1 team))
-           ; 3. find all bases & call agents
+           ; 3. cerca totes les bases i crida els agents per a cada una
            (bases (unit-find (state-map s2) team BASE))
-           (base-info-list (mapcar (lambda (xy) (unit-info s2 team (car xy) (cadr xy))) bases))
+           (base-info-list (mapcar (lambda (xy) (unit-info s2 team xy)) bases))
            (base-actions (mapcar (lambda (info) (unit-agent team info)) base-info-list))
            (s3-result (game-actions s2 team bases base-actions))
            (s3 (car s3-result))
            (base-updates (cadr s3-result))
-           ; 4. find all balls & call agents
+           ; 4. cerca totes les bolles i crida els agents per a cada una
            (balls (unit-find (state-map s3) team BALL))
-           (ball-info-list (mapcar (lambda (xy) (unit-info s3 team (car xy) (cadr xy))) balls))
+           (ball-info-list (mapcar (lambda (xy) (unit-info s3 team xy)) balls))
            (ball-actions (mapcar (lambda (info) (unit-agent team info)) ball-info-list))
            (s4-result (game-actions s3 team balls ball-actions))
            (s4 (car s4-result))
-           (ball-updates (cadr s4-result)))
-        ; 5. increase turn
-        (state-turn s4 (1+ turn))))
+           (ball-updates (cadr s4-result))
+           ; 5. avança el comptador de torn
+           (s5 (state-turn s4 (1+ turn))))
+        ; 6. refresca la finestra gràfica amb el nou estat del mapa
+        (graphics-update s5 (append base-updates ball-updates))
+        s5))
 
-; retorna t si la partida ha acabat, és a dir, si algun dels equips no té cap base viva
+; retorna t si la partida ha acabat: algun equip ha perdut la base o s'arriba al límit de torns
 (defun game-check-end (state)
     (let* ((m (state-map state))
            (t1-alive (unit-find m TEAM-1 BASE))
            (t2-alive (unit-find m TEAM-2 BASE)))
-        (or (not t1-alive) (not t2-alive))))
+        (or (not t1-alive) (not t2-alive) (>= (state-turn state) TURN-LIMIT))))
 
-; retorna l'equip guanyador; si ambdós han perdut la base simultàniament aplica desempat
-; per ordre: més bolles vives, més pintura, aleatori
+; retorna l'equip guanyador; si ambdós equips comparteixen estat (tots dos vius per límit de torns
+; o tots dos morts simultàniament) aplica el desempat per: més bolles vives, més pintura, aleatori
 (defun game-winner (state)
     (let* ((m (state-map state))
            (t1-alive (unit-find m TEAM-1 BASE))
            (t2-alive (unit-find m TEAM-2 BASE)))
-        (cond ((and t1-alive t2-alive) nil) ; both teams alive -> no winner
-              ((and t1-alive (not t2-alive)) TEAM-1) ; team 1 alive and team 2 not alive -> team 1 winner
-              ((and (not t1-alive) t2-alive) TEAM-2) ; team 1 not alive and team 2 alive -> team 2 winner
-            ; both teams not alive -> tie-break
+        (cond ((and t1-alive (not t2-alive)) TEAM-1) ; equip 1 viu i equip 2 mort -> guanya equip 1
+              ((and (not t1-alive) t2-alive) TEAM-2) ; equip 1 mort i equip 2 viu -> guanya equip 2
+            ; ambdós equips comparteixen estat -> aplica desempat
             (t (let ((t1-balls (length (unit-find m TEAM-1 BALL)))
                       (t2-balls (length (unit-find m TEAM-2 BALL)))
                       (t1-paint (state-paint state TEAM-1))
                       (t2-paint (state-paint state TEAM-2)))
                 (cond
-                    ; ball count tie-break
+                    ; desempat per nombre de bolles vives
                     ((> t1-balls t2-balls) TEAM-1)
                     ((< t1-balls t2-balls) TEAM-2)
-                    ; paint amount tie-break
+                    ; desempat per quantitat de pintura
                     ((> t1-paint t2-paint) TEAM-1)
                     ((< t1-paint t2-paint) TEAM-2)
-                    ; random tie-break
+                    ; desempat aleatori
                     (t (if (zerop (random 2)) TEAM-1 TEAM-2))))))))
+
+; refresca la finestra gràfica al final de cada torn
+; updates conté les cel·les que han canviat (format (xy nova-cel·la)); s'ignora i es redibuixa
+; el mapa sencer perquè grafics.lsp no ofereix una primitiva de repintat per cel·la independent
+(defun graphics-update (state updates) (graphics-init (state-map state)))
 
 ; bucle principal del joc; executa torns fins que la partida acabi i retorna l'equip guanyador
 ; usa defun-tco per evitar desbordament de pila en partides llargues
 (defun-tco game-loop (state)
-    ;; (if (game-check-end state)
-    ;;     (progn (princ (game-winner state)) (terpri))
-    ;;     (progn (princ (state-turn state)) (terpri)
-    ;;             (game-loop (game-turn state)))))
-    (if (game-check-end state) 
+    (if (game-check-end state)
         (game-winner state)
-        (progn (state-turn state) (game-loop (game-turn state)))))
+        (game-loop (game-turn state))))
 
 ; punt d'entrada: carrega el mapa, genera el desplaçament aleatori de coordenades i inicia la partida
 (defun paintball (map-name)
@@ -618,11 +671,11 @@
            (dx (random 1001))
            (dy (random 1001))
            (state (state-new 0 m PAINT-INIT PAINT-INIT dx dy (* (map-width m) (map-height m)))))
-        ; graphic window setup
+        ; configuració inicial de la finestra gràfica
         ; (color 0 0 0 255 255 255)
         ; (mode 0 0 640 375)
-        ; enter game loop
+        ; entra al bucle principal del joc
         (graphics-init m)
         (game-loop state)))
 
-(paintball "tiny")
+; (paintball "tiny") ; descomentar per executar la partida automàticament en carregar el fitxer
