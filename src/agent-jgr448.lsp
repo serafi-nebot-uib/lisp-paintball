@@ -7,7 +7,7 @@
 ;; <Descripció de les funcions d'aquest fitxer>
 
 ;; Documentació d'això...
-(defun agent-xyz999 (dades)
+(defun agent-jgr448 (dades)
     ; (car dades) = ronda
     ; (cadr dades) = equip
     ; etc.

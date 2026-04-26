@@ -16,7 +16,7 @@
 
 ; TODO: canviar els noms dels fitxers d'agents pel codi d'aula dels autors
 (load "agent-sng656.lsp")
-(load "agent-xyz999.lsp")
+(load "agent-jgr448.lsp")
 
 ; **************************************************
 ; CONSTANTS
@@ -93,10 +93,10 @@
         (cons (car lst) (list-set (cdr lst) (1- n) val))))
 
 ; transforma la llista lst de 2D en una de 1D
-(defun flatten (lst)
-    (cond ((null lst) nil)
-          ((atom lst) (list lst))
-          (t (append (flatten (car lst)) (flatten (cdr lst))))))
+; (defun flatten (lst)
+;     (cond ((null lst) nil)
+;           ((atom lst) (list lst))
+;           (t (append (flatten (car lst)) (flatten (cdr lst))))))
 
 ; operacions aritmètiques i lògiques bàsiques sobre llistes de N elements 
 ; les funcions només són un "mapping" d'una operació bàsica:
@@ -354,7 +354,7 @@
 (defun unit-agent (team info)
     (if (eq team TEAM-1)
         (agent-sng656 info)
-        (agent-xyz999 info)))
+        (agent-jgr448 info)))
 
 ; ESTRUCTURA D'UNA ACCIÓ
 ; cada acció és una llista de dos elements: (nom arguments)
