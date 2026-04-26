@@ -286,13 +286,14 @@
 ; **************************************************
 
 ; constructor i accessors de l'estat global del joc
-; estructura: (torn mapa pintura-e1 pintura-e2 dx dy next-id)
+; estructura: (torn mapa pintura-e1 pintura-e2 dx dy next-id mem-e1 mem-e2)
 ;   torn:     número de torn actual
 ;   mapa:     estat actual del mapa
 ;   pintura:  quantitat de pintura de cada equip
 ;   dx, dy:   desplaçament de coordenades aplicat a les unitats (aleatori, per ocultar els límits del mapa)
 ;   next-id:  identificador que s'assignarà a la propera bolla creada
-(defun state-new (turn m pt1 pt2 dx dy next-id) (list turn m pt1 pt2 dx dy next-id))
+;   mem:      memòria compartida de cada equip (valor arbitrari, escrivible amb ESCRIU-MEMORIA)
+(defun state-new (turn m pt1 pt2 dx dy next-id) (list turn m pt1 pt2 dx dy next-id nil nil))
 (defun state-turn      (s &optional new) (if new (list-set s 0 new) (nth 0 s)))
 (defun state-map       (s &optional new) (if new (list-set s 1 new) (nth 1 s)))
 (defun state-paint     (s team &optional new)
@@ -301,6 +302,11 @@
 (defun state-dx        (s &optional new) (if new (list-set s 4 new) (nth 4 s)))
 (defun state-dy        (s &optional new) (if new (list-set s 5 new) (nth 5 s)))
 (defun state-next-id   (s &optional new) (if new (list-set s 6 new) (nth 6 s)))
+; memòria compartida per equip; new=nil llegeix, no permet esborrar (cal escriure 'nil explícit
+; via list-set a un valor sentinella si es vol distingir, però no fa falta per l'enunciat)
+(defun state-mem       (s team &optional new)
+    (if new (if (eq team TEAM-1) (list-set s 7 new) (list-set s 8 new))
+            (if (eq team TEAM-1) (nth 7 s) (nth 8 s))))
 
 ; converteix entre coordenades internes del mapa i coordenades desplaçades visibles pels agents
 (defun coord-shift (state xy) (list (+ (car xy) (state-dx state)) (+ (cadr xy) (state-dy state))))
@@ -347,7 +353,7 @@
            (vision-range (if (eq unit BASE) VISION-BASE VISION-BALL))
            (vis-coords (unit-vision m xy vision-range))
            (vis (mapcar (lambda (vxy) (unit-vision-format state vxy)) vis-coords))
-           (mem nil))
+           (mem (state-mem state team)))
         (list turn team paint id unit coord paint-list own-color tr-paint tr-move vis mem)))
 
 ; crida l'agent de l'equip team amb la informació de la unitat i retorna la llista d'accions decidides
@@ -396,8 +402,8 @@
             (unit-actions next-state team xy (cdr actions) next-updates next-created))
         (list state updates)))
 
-; TODO: implementar la memòria compartida
-(defun unit-act-write-mem (state team value) (list state nil))
+; substitueix la memòria compartida de l'equip pel nou valor; no genera cap actualització de mapa
+(defun unit-act-write-mem (state team value) (list (state-mem state team value) nil))
 
 ; mou la bolla de src a dst si l'acció és vàlida (bolla pròpia, cooldown 0, dst lliure i dins del rang)
 ; el cost de moviment augmenta si el moviment és diagonal o si dst no és del color de la bolla
@@ -678,4 +684,4 @@
         (graphics-init m)
         (game-loop state)))
 
-; (paintball "tiny") ; descomentar per executar la partida automàticament en carregar el fitxer
+(paintball "tiny") ; descomentar per executar la partida automàticament en carregar el fitxer
