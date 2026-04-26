@@ -19,6 +19,8 @@
 (defconstant AGENT-SNG656-RGB           '(r g b))
 (defconstant AGENT-SNG656-BALL-COST     50)
 (defconstant AGENT-SNG656-PAINT-RANGE   5)
+(defconstant AGENT-SNG656-DEFENDER-MOD  4)
+(defconstant AGENT-SNG656-DEFENSE-RANGE 100)
 
 ; antiguitat màxima (en torns) abans de descartar una entrada de la memòria
 (defconstant AGENT-SNG656-AGE-MAX 100)
@@ -40,6 +42,9 @@
 (defun agent-sng656-sub   (a b) (mapcar '- a b))
 (defun agent-sng656-pow   (a e) (mapcar (lambda (x) (expt x e)) a))
 (defun agent-sng656-sum   (a)   (reduce '+ a :initial-value 0))
+
+; converteix un booleà Lisp a enter
+(defun agent-sng656-bool-int (x) (if x 1 0))
 
 ; distància euclidiana al quadrat entre dos coords (x y) — vàlida en espai desplaçat
 (defun agent-sng656-dist (a b) (agent-sng656-sum (agent-sng656-pow (agent-sng656-sub a b) 2)))
@@ -132,10 +137,7 @@
 
 ; entries que satisfan el predicat fun aplicat a la cel·la interna
 (defun agent-sng656-entries-where (entries fun)
-    (cond ((null entries) nil)
-          ((funcall fun (agent-sng656-entry-cell (car entries)))
-           (cons (car entries) (agent-sng656-entries-where (cdr entries) fun)))
-          (t (agent-sng656-entries-where (cdr entries) fun))))
+    (remove-if (lambda (e) (not (funcall fun (agent-sng656-entry-cell e)))) entries))
 
 ; entrades que tenen una bolla enemiga
 (defun agent-sng656-enemy-balls (entries team)
@@ -147,9 +149,18 @@
     (agent-sng656-entries-where entries
         (lambda (c) (and (agent-sng656-is-base c) (not (eq (agent-sng656-cell-team c) team))))))
 
+; entrada que conté la nostra base
+(defun agent-sng656-friendly-base (entries team)
+    (car (agent-sng656-entries-where entries
+        (lambda (c) (and (agent-sng656-is-base c) (eq (agent-sng656-cell-team c) team))))))
+
 ; entrades que tenen la cel·la buida
 (defun agent-sng656-empty-lands (entries)
     (agent-sng656-entries-where entries #'agent-sng656-is-empty))
+
+; una bolla de cada DEFENDER-MOD es queda defensant la base
+(defun agent-sng656-defender (info)
+    (zerop (mod (agent-sng656-info-id info) AGENT-SNG656-DEFENDER-MOD)))
 
 ; **************************************************
 ; ESTRATÈGIA DE LA BASE
@@ -263,11 +274,75 @@
         (agent-sng656-best-entry in-range src team turn src-color)))
 
 ; millor objectiu visible (per orientar el moviment): qualsevol entry enemiga/lab
-(defun agent-sng656-best-target (info entries)
+(defun agent-sng656-best-tactical-target (info entries)
     (agent-sng656-best-entry entries
                              (agent-sng656-info-coord info)
                              (agent-sng656-info-team info)
                              (agent-sng656-info-turn info)))
+
+; compta quants veïns d'una coord encara no són a la memòria/visió compartida
+(defun agent-sng656-unknown-neighbours (coord entries)
+    (agent-sng656-sum (mapcar
+        (lambda (off) (agent-sng656-bool-int
+            (null (agent-sng656-entry-at entries (agent-sng656-add coord off)))))
+        AGENT-SNG656-NEIGH-OFFSETS)))
+
+; millor objectiu d'exploració quan no hi ha enemics/labs a la memòria.
+; Només considera terra buida amb almenys un veí desconegut. El valor best té format
+; (entry unknown base-dist ball-dist), on unknown és el nombre de veïns desconeguts.
+; Criteri: maximitzar unknown, després maximitzar base-dist i finalment minimitzar ball-dist.
+(defun agent-sng656-best-frontier-target (info entries)
+    (let* ((src (agent-sng656-info-coord info))
+           (team (agent-sng656-info-team info))
+           (own-base-entry (agent-sng656-friendly-base entries team))
+           (origin (if own-base-entry (agent-sng656-entry-coord own-base-entry) src)))
+          (reduce (lambda (best entry)
+                    (let* ((coord (agent-sng656-entry-coord entry))
+                           (unknown (if (agent-sng656-is-empty (agent-sng656-entry-cell entry))
+                                        (agent-sng656-unknown-neighbours coord entries)
+                                        0))
+                           (base-dist (agent-sng656-dist coord origin))
+                           (ball-dist (agent-sng656-dist coord src)))
+                          (cond ((zerop unknown) best)
+                                ((null best) (list entry unknown base-dist ball-dist))
+                                ((> unknown (cadr best)) (list entry unknown base-dist ball-dist)) ; maximitzar nombre de cel·les adjacents no explorades
+                                ((and (= unknown (cadr best)) (> base-dist (caddr best))) (list entry unknown base-dist ball-dist))
+                                ((and (= unknown (cadr best))
+                                      (= base-dist (caddr best))
+                                      (< ball-dist (nth 3 best))) (list entry unknown base-dist ball-dist))
+                                (t best))))
+                  entries
+                  :initial-value nil)))
+
+; objectiu defensiu per bolles marcades com a defensores.
+; Cerca bolles enemigues dins DEFENSE-RANGE de la nostra base coneguda. Si encara no
+; coneixem la base pròpia dins la memòria, usa la posició actual com a origen.
+; Retorna nil si no hi ha amenaça propera, així el defensor no s'allunya explorant.
+(defun agent-sng656-best-defense-target (info entries)
+    (let* ((team (agent-sng656-info-team info))
+           (own-base-entry (agent-sng656-friendly-base entries team))
+           (origin (if own-base-entry
+                       (agent-sng656-entry-coord own-base-entry)
+                       (agent-sng656-info-coord info)))
+           (near-enemies (remove-if
+                            (lambda (e) (> (agent-sng656-dist (agent-sng656-entry-coord e) origin)
+                                           AGENT-SNG656-DEFENSE-RANGE))
+                            (agent-sng656-enemy-balls entries team))))
+          (agent-sng656-best-entry near-enemies
+                                   (agent-sng656-info-coord info)
+                                   team
+                                   (agent-sng656-info-turn info))))
+
+; millor objectiu visible (per orientar el moviment), amb exploració simple:
+;   - defensors: només persegueixen bolles enemigues properes a la base
+;   - exploradors: enemics/labs primer; si no, frontera de mapa conegut
+(defun agent-sng656-best-target (info entries)
+    (cond ((agent-sng656-defender info)
+           (agent-sng656-best-defense-target info entries))
+          (t (let ((target (agent-sng656-best-tactical-target info entries)))
+                (if target
+                    target
+                    (agent-sng656-best-frontier-target info entries))))))
 
 ; recorre els 8 offsets veïns recursivament i tria el que minimitza d² al target
 ; cada candidat ha de ser terra buida i present a entries (això garanteix que sigui dins del mapa)
@@ -288,10 +363,12 @@
 (defun agent-sng656-best-move-step (info entries)
     (let* ((src (agent-sng656-info-coord info))
            (target (agent-sng656-best-target info entries))
-           (target-coord (if target (agent-sng656-entry-coord (car target)) nil))
-           (best (agent-sng656-best-step-rec src entries target-coord
-                                             AGENT-SNG656-NEIGH-OFFSETS nil)))
-        (if best (car best) nil)))
+           (target-coord (if target (agent-sng656-entry-coord (car target)) nil)))
+        (if target-coord
+            (let ((best (agent-sng656-best-step-rec src entries target-coord
+                                                    AGENT-SNG656-NEIGH-OFFSETS nil)))
+                (if best (car best) nil))
+            nil)))
 
 ; estratègia de la bolla:
 ;   - intenta pintar el millor objectiu en rang (si tr-paint < 1)
