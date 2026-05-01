@@ -118,6 +118,8 @@
           ((member (car lst) (cdr lst)) (unique (cdr lst)))
           (t (cons (car lst) (unique (cdr lst))))))
 
+(defun neq (a b) (not (eq 'a 'b)))
+
 ; **************************************************
 ; MAP
 ; **************************************************
@@ -145,7 +147,7 @@
     (cond
         ((cell-type-water cell) (list WATER))
         ((cell-type-land cell)
-            (cond   ((cell-has-lab cell)  (list LAND (cell-color cell) LAB (cell-unit-team cell)))
+            (cond   ((cell-has-lab cell)  (list LAND (cell-color cell) LAB  (cell-unit-team cell)))
                     ((cell-has-base cell) (list LAND (cell-color cell) BASE (cell-unit-team cell) next-id '()))
                     ((cell-has-ball cell) (list LAND (cell-color cell) BALL (cell-unit-team cell) next-id '()
                                                      (cell-unit-color cell)
@@ -361,9 +363,10 @@
                     ((eq name ACTION-MEM-WRITE) (unit-act-write-mem state team (car args)))
                     (t (list state nil))))
                 (next-state (car result))
-                (next-updates (append updates (cadr result))))
-            (unit-actions next-state team xy (cdr actions) next-updates)))
-        (list state updates))
+                (act-update (cadr result))
+                (next-updates (append updates (if act-update (list act-update) nil))))
+            (unit-actions next-state team xy (cdr actions) next-updates))
+        (list state updates)))
 
 ; TODO: implement memory
 (defun unit-act-write-mem (state team value) (list state nil))
@@ -402,11 +405,11 @@
                             (src-upd (list ux uy src-new))
                             (dst-upd (list tx ty dst-new))
                             (state-next (state-map state (map-update m src-upd dst-upd))))
-                        (list state-next (list src-upd dst-upd)))
+                        (list state-next (list ACTION-MOVE src-upd dst-upd)))
                     ; l'acció és invàlida, no s'aplica cap canvi al mapa
                     (list state nil)))
             (list state nil))))
-
+            
 ; pinta la cel·la dst amb el color de la bolla a src si l'acció és vàlida (cooldown 0, dins del rang)
 ; el cost de pintar es triplica si src no és del color de la bolla
 (defun unit-act-paint (state team src dst)
@@ -435,7 +438,7 @@
                            (src-upd (list ux uy src-cell-new))
                            (dst-upd (list tx ty dst-cell-new))
                            (state-next (state-map state (map-update m src-upd dst-upd))))
-                        (list state-next (list src-upd dst-upd)))
+                        (list state-next (list ACTION-PAINT src-upd dst-upd)))
                     ; l'acció és invàlida, no s'aplica cap canvi al mapa
                     (list state nil)))
             (list state nil))))
@@ -465,7 +468,7 @@
                            (s1 (state-map state (map-update m upd)))
                            (s2 (state-paint s1 team (- paint BASE-CREATE-COST)))
                            (s3 (state-next-id s2 (1+ next-id))))
-                      (list s3 (list upd)))
+                      (list s3 (list ACTION-CREATE-BALL upd)))
                     ; l'acció és invàlida, no s'aplica cap canvi al mapa
                     (list state nil)))
             (list state nil))))
@@ -548,7 +551,7 @@
 ; processa les accions de les bases i les bolles, i avança el comptador de torn
 (defun game-turn (state)
     (let* ((turn (state-turn state))
-           (team (if (evenp turn) TEAM-1 TEAM-2))
+           (team (if (oddp turn) TEAM-1 TEAM-2))
            ; 1. add paint increase
            (s1 (game-paint-increase state team))
            ; 2. decrement cooldowns
@@ -567,6 +570,7 @@
            (s4-result (game-actions s3 team balls ball-actions))
            (s4 (car s4-result))
            (ball-updates (cadr s4-result)))
+        (graphics-upd s4 (append base-updates ball-updates))
         ; 5. increase turn
         (state-turn s4 (1+ turn))))
 
@@ -622,7 +626,7 @@
         ; (color 0 0 0 255 255 255)
         ; (mode 0 0 640 375)
         ; enter game loop
-        (graphics-init m)
-        (game-loop state)))
+        (graphics-upd state)
+        (game-loop (state-turn state 1))))
 
 (paintball "tiny")
