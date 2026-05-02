@@ -148,6 +148,8 @@
           ((member (car lst) (cdr lst)) (unique (cdr lst)))
           (t (cons (car lst) (unique (cdr lst))))))
 
+(defun neq (a b) (not (eq 'a 'b)))
+
 ; **************************************************
 ; MAP
 ; **************************************************
@@ -175,7 +177,7 @@
     (cond
         ((cell-type-water cell) (list WATER))
         ((cell-type-land cell)
-            (cond   ((cell-has-lab cell)  (list LAND (cell-color cell) LAB (cell-unit-team cell)))
+            (cond   ((cell-has-lab cell)  (list LAND (cell-color cell) LAB  (cell-unit-team cell)))
                     ((cell-has-base cell) (list LAND (cell-color cell) BASE (cell-unit-team cell) next-id '()))
                     ((cell-has-ball cell) (list LAND (cell-color cell) BALL (cell-unit-team cell) next-id '()
                                                      (cell-unit-color cell)
@@ -197,9 +199,9 @@
         (if val (list-set m y (list-set (nth y m) x val))
                 (nth x (nth y m)))))
 
-; aplica múltiples actualitzacions al mapa m en seqüència; cada upd té format (xy nou-valor)
+; aplica múltiples actualitzacions al mapa m en seqüència; cada upd té format (x y nou-valor)
 (defun map-update (m &rest upd)
-    (reduce (lambda (m p) (map-cell m (car p) (cadr p))) upd :initial-value m))
+    (reduce (lambda (m p) (map-cell m (list (car p) (cadr p)) (caddr p))) upd :initial-value m))
 
 ; calcula el nombre de cel·les del mapa m que compleixen la condició retornada per fun
 (defun map-count (m fun) (sum (mapcar (lambda (row) (count-if fun row)) m)))
@@ -394,12 +396,10 @@
                     ((eq name ACTION-CREATE-BALL) (unit-act-create-ball state team xy (cadr args) (car args)))
                     ((eq name ACTION-MEM-WRITE) (unit-act-write-mem state team (car args)))
                     (t (list state nil))))
-               (next-state (car result))
-               (next-updates (append updates (cadr result)))
-               ; marca created si una crea-bolla ha tingut èxit (ha produït actualitzacions)
-               (next-created (or created
-                                 (and (eq name ACTION-CREATE-BALL) (cadr result) t))))
-            (unit-actions next-state team xy (cdr actions) next-updates next-created))
+                (next-state (car result))
+                (act-update (cadr result))
+                (next-updates (append updates (if act-update (list act-update) nil))))
+            (unit-actions next-state team xy (cdr actions) next-updates))
         (list state updates)))
 
 ; substitueix la memòria compartida de l'equip pel nou valor; no genera cap actualització de mapa
@@ -434,14 +434,14 @@
                                           ball-color
                                           (cell-unit-tr-paint src-cell)
                                           tr-move-new))
-                            (src-upd (list src src-new))
-                            (dst-upd (list target dst-new))
+                            (src-upd (list (car src) (cadr src) src-new))
+                            (dst-upd (list (car target) (cadr target) dst-new))
                             (state-next (state-map state (map-update m src-upd dst-upd))))
-                        (list state-next (list src-upd dst-upd)))
+                        (list state-next (list ACTION-MOVE src-upd dst-upd)))
                     ; l'acció és invàlida, no s'aplica cap canvi al mapa
                     (list state nil)))
             (list state nil))))
-
+            
 ; pinta la cel·la dst amb el color de la bolla a src si l'acció és vàlida (cooldown 0, dins del rang)
 ; el cost de pintar es triplica si src no és del color de la bolla
 (defun unit-act-paint (state team src dst)
@@ -472,16 +472,16 @@
                                    (cell-final (if (cell-has-ball cell-painted)
                                                    (cell-unit-tr-paint cell-painted tr-paint-new)
                                                    cell-painted))
-                                   (upd (list src cell-final))
+                                   (upd (list (car src) (cadr src) cell-final))
                                    (state-next (state-map state (map-update m upd))))
-                                (list state-next (list upd)))
+                                (list state-next (list ACTION-PAINT upd upd)))
                             ; src i dst diferents: dues actualitzacions independents
                             (let* ((src-cell-new (cell-unit-tr-paint src-cell tr-paint-new))
                                    (dst-cell-new (cell-apply-paint team dst-cell ball-color))
-                                   (src-upd (list src src-cell-new))
-                                   (dst-upd (list target dst-cell-new))
+                                   (src-upd (list (car src) (cadr src) src-cell-new))
+                                   (dst-upd (list (car target) (cadr target) dst-cell-new))
                                    (state-next (state-map state (map-update m src-upd dst-upd))))
-                                (list state-next (list src-upd dst-upd)))))
+                                (list state-next (list ACTION-PAINT src-upd dst-upd)))))
                     ; l'acció és invàlida, no s'aplica cap canvi al mapa
                     (list state nil)))
             (list state nil))))
@@ -505,11 +505,11 @@
                     ; l'acció es vàlida, aplica els canvis al mapa
                     (let* ((next-id (state-next-id state))
                            (dst-new (list LAND (cell-color dst-cell) BALL team next-id (list color) color 0 0))
-                           (upd (list target dst-new))
+                           (upd (list (car target) (cadr target) dst-new))
                            (s1 (state-map state (map-update m upd)))
                            (s2 (state-paint s1 team (- paint BASE-CREATE-COST)))
                            (s3 (state-next-id s2 (1+ next-id))))
-                      (list s3 (list upd)))
+                      (list s3 (list ACTION-CREATE-BALL upd)))
                     ; l'acció és invàlida, no s'aplica cap canvi al mapa
                     (list state nil)))
             (list state nil))))
@@ -604,7 +604,7 @@
 ; processa les accions de les bases i les bolles, i avança el comptador de torn
 (defun game-turn (state)
     (let* ((turn (state-turn state))
-           (team (if (evenp turn) TEAM-1 TEAM-2))
+           (team (if (oddp turn) TEAM-1 TEAM-2))
            ; 1. incrementa la pintura de l'equip actiu
            (s1 (game-paint-increase state team))
            ; 2. decrementa els cooldowns de les bolles de l'equip actiu
@@ -622,12 +622,10 @@
            (ball-actions (mapcar (lambda (info) (unit-agent team info)) ball-info-list))
            (s4-result (game-actions s3 team balls ball-actions))
            (s4 (car s4-result))
-           (ball-updates (cadr s4-result))
-           ; 5. avança el comptador de torn
-           (s5 (state-turn s4 (1+ turn))))
-        ; 6. refresca la finestra gràfica amb el nou estat del mapa
-        (graphics-update s5 (append base-updates ball-updates))
-        s5))
+           (ball-updates (cadr s4-result)))
+        (graphics-upd s4 (append base-updates ball-updates))
+        ; 5. increase turn
+        (state-turn s4 (1+ turn))))
 
 ; retorna t si la partida ha acabat: algun equip ha perdut la base o s'arriba al límit de torns
 (defun game-check-end (state)
@@ -680,8 +678,8 @@
         ; configuració inicial de la finestra gràfica
         ; (color 0 0 0 255 255 255)
         ; (mode 0 0 640 375)
-        ; entra al bucle principal del joc
-        (graphics-init m)
-        (game-loop state)))
+        ; enter game loop
+        (graphics-upd state)
+        (game-loop (state-turn state 1))))
 
 (paintball "tiny") ; descomentar per executar la partida automàticament en carregar el fitxer
