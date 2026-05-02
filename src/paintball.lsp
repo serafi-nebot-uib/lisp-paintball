@@ -682,4 +682,4 @@
         (graphics-upd state)
         (game-loop (state-turn state 1))))
 
-(paintball "tiny") ; descomentar per executar la partida automàticament en carregar el fitxer
+; (paintball "tiny") ; descomentar per executar la partida automàticament en carregar el fitxer
