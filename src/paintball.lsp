@@ -1,10 +1,24 @@
 ;; Pràctica final de Llenguatges de Programació.
 ;; LISP - Paintball.
-;; Estudiants: SNG656, JGR448
-;; Professor: XXX.
+;; Estudiants: Serafí Nebot Ginard, Jaume Galmés Ramis.
+;; Professor: Miquel Cabot.
 ;; Lliurament: primera convocatòria.
 ;; Fitxer del controlador principal.
-;; <Descripció de les funcions d'aquest fitxer>
+;; Conté el bucle de joc i tota la lògica que el fa funcionar:
+;; - Utilitats genèriques (operacions sobre llistes, distància, producte cartesià…).
+;; - Càrrega i representació del mapa (map-load, map-cell, map-update…) i accessors
+;;   purament funcionals de cel·les que retornen còpies sense mutar.
+;; - Estat global del joc (state-*): torn, mapa, pintura per equip, desplaçament
+;;   aleatori de coordenades visibles, següent identificador de bolla i memòria
+;;   compartida de cada equip.
+;; - Cerca d'unitats i construcció de la informació que rep cada agent (unit-info,
+;;   unit-vision, unit-vision-format), respectant els rangs de visió i el desplaçament
+;;   de coordenades que oculta els límits reals del mapa.
+;; - Resolució d'accions dels agents: MOU, PINTA, CREA-BOLLA i ESCRIU-MEMORIA, amb
+;;   les seves validacions, costos de cooldown i actualitzacions del mapa.
+;; - Bucle principal (game-turn, game-loop, paintball): cada torn incrementa pintura,
+;;   decrementa cooldowns, demana accions a la base i a les bolles de l'equip actiu,
+;;   actualitza el mòdul gràfic i comprova condicions de final i desempat.
 
 (load "grafics.lsp")
 (load "tco.lsp")
@@ -757,5 +771,3 @@
         ; enter game loop
         (graphics-upd state)
         (game-loop (state-turn state 1))))
-
-(paintball "basic1") ; descomentar per executar la partida automàticament en carregar el fitxer

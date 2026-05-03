@@ -1,7 +1,7 @@
 ;; Pràctica final de Llenguatges de Programació.
 ;; LISP - Paintball.
-;; Estudiants: SNG656, JGR448.
-;; Professor: XXX.
+;; Estudiants: Serafí Nebot Ginard, Jaume Galmés Ramis.
+;; Professor: Miquel Cabot.
 ;; Lliurament: primera convocatòria.
 ;; Fitxer de l'agent intel·ligent JGR448.
 ;;
