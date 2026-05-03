@@ -147,7 +147,7 @@
         (draw-triangle c (cadddr l))
         (moverel (- (cadr l)) (- (caddr l)))))
 
-(defun draw-triangle (c &optional (ttype 'LLT)) ; cateto = altura = base 
+(defun draw-triangle (c &optional (ttype 'LLT)) ; catet = altura = base 
     "Dibuixa un triangle rectangle de tipus 'ttype' i costats de mida 'c'"
     (let ((l (cond ((eq ttype 'LLT) '(0 0 1 0 1 0 0 0))     ; ◣ Lower Left Triangle
                    ((eq ttype 'ULT) '(0 0 1 0 1 1 1 0))     ; ◤ Upper Left Triangle
@@ -190,7 +190,7 @@
              (draw-bitmap-rows (cdr bm) x (+ y scale) scale))))
 
 (defun draw-bitmap-row (bm-row x y scale)
-    "Dibuixa una unica fila bm-row d'un bitmap a la posició (x, y) escalat per scale"
+    "Dibuixa una única fila bm-row d'un bitmap a la posició (x, y) escalat per scale"
     (cond ((null bm-row) nil)
           (t (when (= (car bm-row) 1) (fill-rect x y scale scale))
              (draw-bitmap-row (cdr bm-row) (+ x scale) y scale))))
@@ -226,7 +226,7 @@
 ; mètode general d'actualització del fitxer "grafics.lsp", s'encarrèga d'obtenir el mapa, cridar als mètodes
 ; d'actualització generals (barra lateral i mapa) amb els canvis realitzats, i calcular a partir de
 ; la política seleccionada de la barra lateral [fixa (tamany mínim de barra lateral) o mòvil]:
-; - El tamany de cel·la, intentant que aquesta sigui la màxima possible sense sobrepassar l'espai disponible.
+; - El tamany de cel·la, intentant que aquesta sigui la màxima possible sense sobrepassar l'espai disponible
 ; - El posicionament absolut del tauler o mapa dins de l'interfície de mode que aquesta es trobi centrada
 (defun graphics-upd (state &optional (updates nil))
     "Actualitza els gràfics a partir de l'estat 'state' i la llista de actualitzacions 'update'"
@@ -319,7 +319,7 @@
             (draw-str td-txt1 td-x1 td-y1 td-scale1))
          (t (draw-str td-team-txt td-team-x td-team-y td-team-scale :max-cs td-max-cs)))))
 
-; actualitza (pinta) el color dels requadres que representen els colors dels quals està pintada una base al panell
+; actualitza (emplena) el color dels requadres que representen els colors dels quals està pintada una base al panell
 (defun base-color-upd (colbox-x0 colbox-y0 colbox-size colbox-bord-thck &optional rgb-col)
     "Actualitza el requadre ubicat a 'colbox-(x0,y0)' amb tamany 'colbox-size' i contorn 'colbox-bord-thck' del color 'rgb-col'"
     (let* ((colbox-inner-size (- colbox-size (* colbox-bord-thck 2)))
