@@ -737,12 +737,6 @@
                     ; desempat aleatori
                     (t (if (zerop (random 2)) TEAM-1 TEAM-2))))))))
 
-; updates conté les cel·les que han canviat (format (xy nova-cel·la)); s'ignora i es redibuixa
-; el mapa sencer perquè grafics.lsp no ofereix una primitiva de repintat per cel·la independent
-(defun graphics-update (state updates)
-    "Actualitza els gràfics a partir de l'estat 'state' i la llista d'actualitzacions 'updates'."
-    (graphics-init (state-map state)))
-
 ; bucle principal del joc; executa torns fins que la partida acabi i retorna l'equip guanyador
 ; usa defun-tco per evitar desbordament de pila en partides llargues
 (defun-tco game-loop (state)
