@@ -1,10 +1,11 @@
 ;; Pràctica final de Llenguatges de Programació.
 ;; LISP - Paintball.
 ;; Estudiants: Serafí Nebot Ginard, Jaume Galmés Ramis.
-;; Professor: XXX.
+;; Professor: Miquel Cabot.
 ;; Lliurament: primera convocatòria.
 ;; Fitxer del mòdul gràfic.
 ;; Dins aquest fitxer es troben tots els mètodes que permeten graficar el joc LISP Paint Ball
+;; cada un d'ells conté una breu explicació de la funció que realitza i l'ús dels paràmetres més rellevants
 
 ; **************************************************
 ; CONSTANTS
@@ -24,7 +25,7 @@
 (defconstant BOARD-DELIM-W         2)   ; amplada del delimitador entre contenidors
 (defconstant BOARD-MAX-COLS        60)
 
-;colors que s'empren de forma global al llarg del codi
+; colors que s'empren de forma global al llarg del codi
 (defconstant BLACK                 '(0 0 0))
 (defconstant RED                   '(255 0 0))
 (defconstant GREEN                 '(0 255 0))
@@ -36,11 +37,13 @@
 (defconstant LAND-COL-RED          '(255 128 109))
 (defconstant LAND-COL-GREEN        '(205 168 126))
 (defconstant LAND-COL-BLUE         '(166 139 207))
+
 ; t pinta el color de la cel·la, nil pinta color de terra
 (defconstant PAINT-CELL-COL        t)
 (defconstant DEF-TEXT-COL          BLACK)
 (defconstant DEF-MARG-COL          BLACK)
 (defconstant BACKGROUND-COL        WHITE)
+
 ; desactiva el dibuixat global de la marca d'aigua del joc
 (defconstant SHOW-WATERMARK        t)
 
@@ -91,7 +94,7 @@
         colors))
 
 (defun gradient-rect (x y w h &optional col)
-    "Genera una gradient de lluminositat des del color 'col' fins a blanc"
+    "Genera una gradient de lluminositat des del color 'col' fins a blanc a la posició (x,y) amb dimensions (w,h)"
     (cond ((<= h 0) nil)
           (t (let ((new-col (mapcar '(lambda (a) (if (< a 255) (1+ a) 255)) col)))
                 (set-color new-col)
@@ -114,7 +117,7 @@
              (fill-rect-rel w (1- h)))))
 
 (defun draw-rect-rel (w h)
-    "Dibuixa un rectangle d'amplada `w` i alçada 'h' a la posició actual."
+    "Dibuixa un rectangle d'amplada 'w' i alçada 'h' a la posició actual."
     (drawrel w 0)
     (drawrel 0 h)
     (drawrel (- w) 0)
@@ -132,7 +135,6 @@
 ; dibuixa un contorn rectangular d'amplada 'w', alçada 'h' i gruix 'g' a la posició (x, y)
 (defun rect-outline (x y w h &optional (g CELL-BORD-THCK)) (move x y) (rect-outline-rel (1+ w) (1+ h) g))
 
-; TODO: variable height triangles [reduction ratio (per line) = height / base]
 (defun draw-triangle-iso (b &optional (ttype 'UPT))
     "Dibuixa un triangle isòsceles de tipus 'ttype' de base 'b' i altura 'b'/2"
     (let* ((c (round (/ b 2)))
@@ -145,7 +147,7 @@
         (draw-triangle c (cadddr l))
         (moverel (- (cadr l)) (- (caddr l)))))
 
-(defun draw-triangle (c &optional (ttype 'LLT)) ;cateto = altura = base 
+(defun draw-triangle (c &optional (ttype 'LLT)) ; catet = altura = base 
     "Dibuixa un triangle rectangle de tipus 'ttype' i costats de mida 'c'"
     (let ((l (cond ((eq ttype 'LLT) '(0 0 1 0 1 0 0 0))     ; ◣ Lower Left Triangle
                    ((eq ttype 'ULT) '(0 0 1 0 1 1 1 0))     ; ◤ Upper Left Triangle
@@ -188,7 +190,7 @@
              (draw-bitmap-rows (cdr bm) x (+ y scale) scale))))
 
 (defun draw-bitmap-row (bm-row x y scale)
-    "Dibuixa una unica fila bm-row d'un bitmap a la posició (x, y) escalat per scale"
+    "Dibuixa una única fila bm-row d'un bitmap a la posició (x, y) escalat per scale"
     (cond ((null bm-row) nil)
           (t (when (= (car bm-row) 1) (fill-rect x y scale scale))
              (draw-bitmap-row (cdr bm-row) (+ x scale) y scale))))
@@ -221,18 +223,18 @@
 
 ; ******************************************************************************************
 
-;TODO: add optional shadow to board
 ; mètode general d'actualització del fitxer "grafics.lsp", s'encarrèga d'obtenir el mapa, cridar als mètodes
 ; d'actualització generals (barra lateral i mapa) amb els canvis realitzats, i calcular a partir de
 ; la política seleccionada de la barra lateral [fixa (tamany mínim de barra lateral) o mòvil]:
-; - El tamany de cel·la, intentant que aquesta sigui la màxima possible sense sobrepassar l'espai disponible.
+; - El tamany de cel·la, intentant que aquesta sigui la màxima possible sense sobrepassar l'espai disponible
 ; - El posicionament absolut del tauler o mapa dins de l'interfície de mode que aquesta es trobi centrada
 (defun graphics-upd (state &optional (updates nil))
+    "Actualitza els gràfics a partir de l'estat 'state' i la llista de actualitzacions 'update'"
     (let* ((m (state-map state))
            (map-h (map-height m))
            (map-w (map-width m))
            (cell-ratio (min (/ XLISP-WINDOW-HEIGHT map-h) (/ SB-MIN-WIDTH map-w)))
-           (cell-size  (min CELL-MAX-SIZE (max CELL-MIN-SIZE (truncate cell-ratio)))) ; board cell size
+           (cell-size  (min CELL-MAX-SIZE (max CELL-MIN-SIZE (truncate cell-ratio)))) ; tamany de cel·la del tauler
            (board-h  (+ (* map-h (- cell-size CELL-BORD-THCK)) CELL-BORD-THCK))
            (board-w  (+ (* map-w (- cell-size CELL-BORD-THCK)) CELL-BORD-THCK))
            (y-margin (floor (/ (- XLISP-WINDOW-HEIGHT board-h) 2)))
@@ -248,13 +250,13 @@
                   (when SHOW-WATERMARK (draw-watermark (+ board-container-size 35) 100 (- XLISP-WINDOW-WIDTH board-container-size) XLISP-WINDOW-HEIGHT 5))
                   (set-color BLACK)
                   (fill-rect board-container-size 0 BOARD-DELIM-W XLISP-WINDOW-HEIGHT)
-                  (draw-map m xi yi 0 cell-size))   
+                  (draw-map m xi yi 0 cell-size))
               (updates (paint-changes xi yi cell-size updates))
               (t nil))
          (status-sidebar-upd state board-container-size updates)))
-
-; rep i grafica el guanyador de la partida
+ 
 (defun graphics-end (winner)
+    "Rep i grafica el guanyador 'winner' de la partida"
     (let* ((msg-scale 2)
            (num-scale (+ msg-scale 1))
            (msg-x 150)  (msg-y 250)
@@ -279,9 +281,9 @@
         (draw-str msg-txt1 msg-txt1-x (+ msg-y (* line-h 2) (- 10)) msg-scale)
         (draw-str msg-num0 msg-num0-x (+ msg-y (* line-h 0) 0) num-scale)))
 
-; dibuixa i actualitza el comptador de torn
-(defun turn-counter-panel (xi yi container-w team turn)
-    (let* ((tn-scale0 2)     (tn-txt0 "JUGADA ") ; (tn-txt0 "TORN ")
+(defun turn-counter-panel (xi yi container-w turn)
+    "Dibuixa i actualitza el comptador de torn de dimensions 'container-w' ubicat a la posició (xi,yi)"
+    (let* ((tn-scale0 2)     (tn-txt0 "JUGADA ")
            (tn-scale1 2)     (tn-txt1 "N*")
            (tn-num-scale 3)  (tn-num-txt (to-string turn))
            (tn-x-margin (floor (/ (- container-w (get-str-width tn-txt0 tn-scale0)) 2)))
@@ -298,8 +300,8 @@
             (draw-str tn-txt1 tn-x1 tn-y1 tn-scale1))
          (t (draw-str tn-num-txt  tn-num-x  tn-num-y  tn-num-scale  :max-cs tn-num-max-cs)))))
 
-; dibuixa i actualitza el panell on s'informa de l'equip que està jugant al torn actual
 (defun team-panel (xi yi container-w team turn)
+    "Dibuixa i actualitza el panell on s'informa de l'equip 'team' que està jugant al torn actual"
     (let* ((td-scale0 2)      (td-txt0 "Torn de")
            (td-scale1 2)      (td-txt1 "l'equip ")
            (td-team-scale 2)  (td-team-txt (if (eq team TEAM-1) "1" "2"))
@@ -317,8 +319,9 @@
             (draw-str td-txt1 td-x1 td-y1 td-scale1))
          (t (draw-str td-team-txt td-team-x td-team-y td-team-scale :max-cs td-max-cs)))))
 
-; actualitza els requadres que representen els colors dels quals està pintada una base 
+; actualitza (emplena) el color dels requadres que representen els colors dels quals està pintada una base al panell
 (defun base-color-upd (colbox-x0 colbox-y0 colbox-size colbox-bord-thck &optional rgb-col)
+    "Actualitza el requadre ubicat a 'colbox-(x0,y0)' amb tamany 'colbox-size' i contorn 'colbox-bord-thck' del color 'rgb-col'"
     (let* ((colbox-inner-size (- colbox-size (* colbox-bord-thck 2)))
            (colbox-inner-x0 (+ colbox-x0 colbox-bord-thck))
            (colbox-inner-y0 (+ colbox-y0 colbox-bord-thck))
@@ -340,6 +343,8 @@
 
 ; dibuixa i gestiona els marcadors de colors pintats de cada una de les bases
 (defun base-color-panel (x0 y0 container-w &optional updates turn)
+    "Dibuixa el panell a la posició '(x0,y0)' centrat a partir de l'amplada del contenidor 'container-w'
+     quan la llista 'updates' conté una acció de pintar una base"
     (if (or (= turn 0) updates)
         (let* ((act-upd  (car updates))
                (action   (car act-upd))
@@ -377,11 +382,10 @@
                 (base-color-upd colbox-t2-x colbox-t2-y colbox-size colbox-bord-thck))
             (t (when (or (and (eq action ACTION-PAINT) (cell-has-base dst-cell)) (eq action 'ELIMINA-BASE))
                     (let* ((new-color (cell-unit-color src-cell))
-                           (base-team (cell-unit-team dst-cell))
-                           (dst-cell-col (cons (cell-unit-color dst-cell) (cell-unit-paint dst-cell)))
+                           (team (cell-unit-team dst-cell))
+                           (base-team (if (eq action 'ELIMINA-BASE) (opp-team team) team))
                            (colbox-x  (if (eq base-team TEAM-1) colbox-t1-x colbox-t2-x))
                            (colbox-y  (if (eq base-team TEAM-1) colbox-t1-y colbox-t2-y)))
-                        ;; (set-color BLACK) (princ (strcat "PINTANT BASE EQUIP" (if (eq base-team TEAM-1) "1" "2")))(terpri)(princ dst-cell-col)(terpri)
                         (base-color-upd colbox-x colbox-y colbox-size colbox-bord-thck new-color)))
                 (base-color-panel x0 y0 container-w (cdr updates) turn)
             )))
@@ -390,6 +394,8 @@
 ; dibuixa i actualitza a cada torn una graella amb algunes de les estadístiques a destacar durant el joc com són
 ; la quantitat de pintura, el multiplicador de pintura per torn i el nombre de laboratoris capturats per equip
 (defun stats-table (xi container-w state turn team)
+    "Dibuixa la taula a la posició 'xi', centrada respecte el contenidor amb amplada 'container-w',
+     rep informació com l'estat 'state', el torn 'turn' i l'equip del torn actual 'team'"
     (let* ((m (state-map state))
            (e1-paint  (state-paint state TEAM-1))
            (e2-paint  (state-paint state TEAM-2))
@@ -404,19 +410,18 @@
            (row1-y (- row0-y   lin-thck (* stats-scale  BITMAP-HEIGHT) (* inner-sep 1) 1))
            (row2-y (- row1-y   lin-thck (* stats-scale  BITMAP-HEIGHT) (* inner-sep 1)))
            (col0-w (+ lin-thck (get-str-width pq-txt0 header-scale) outer-sep inner-sep))
-           (col1-w (+ lin-thck (get-str-width pm-txt0 header-scale) outer-sep inner-sep)) ;(* inner-sep 2)))
-           (col2-w (+ lin-thck (get-str-width lq-txt0 header-scale) outer-sep inner-sep)) ;(* lin-thck 2)
+           (col1-w (+ lin-thck (get-str-width pm-txt0 header-scale) outer-sep inner-sep))
+           (col2-w (+ lin-thck (get-str-width lq-txt0 header-scale) outer-sep inner-sep))
            (table-x-margin (floor (/ (- container-w (+ col0-w col1-w col2-w)) 2))) 
            (table-x (+ xi table-x-margin))
-           (col0-x  (+ table-x lin-thck)) ;col refers to first px after column's left vertical border
+           (col0-x  (+ table-x lin-thck))
            (col1-x  (+ col0-x col0-w))
            (col2-x  (+ col1-x col1-w))
-           ;headers
            (pq-x0 (+ col0-x outer-sep))  (pq-y0 (+ row0-y inner-sep))
-           (pm-x0 (+ col1-x outer-sep))  (pm-y0 (+ row0-y inner-sep))  ; (pm-x0 (+ col1-x inner-sep)) 
+           (pm-x0 (+ col1-x outer-sep))  (pm-y0 (+ row0-y inner-sep))
            (lq-x0 (+ col2-x outer-sep))  (lq-y0 (+ row0-y inner-sep))
            (lt-x0 (- pm-x0 (* stats-scale 2)))
-           (lt-y0 (- row2-y outer-sep inner-sep (* BITMAP-HEIGHT header-scale))) ;TOTAL LAB QTY
+           (lt-y0 (- row2-y outer-sep inner-sep (* BITMAP-HEIGHT header-scale)))
            (pq-t1-txt (strcat "" e1-paint))
            (pq-t2-txt (strcat "" e2-paint))
            (pm-t-txt  (strcat "x" (+ 1 (* team-labs 0.5))))
@@ -458,15 +463,15 @@
                 (draw-str pq-t2-txt (+ pq-x0 pq-t-margin-x) row2-y stats-scale :max-cs pq-t-max-cs :bcol t-bcol)
                 (draw-str pm-t-txt  (+ pm-x0)               t-y    stats-scale :max-cs pm-t-max-cs :bcol t-bcol)
                 (draw-str lq-t-txt  (+ lq-x0 lq-t-margin-x) t-y    stats-scale :max-cs lq-t-max-cs :bcol t-bcol))))))
-                                            ;;  pm-t-margin-x)
 
 ; mètode que formata i dibuixa en pantalla la llista d'actualitzacions dutes a terme a cada torn, incloent
 ; la destrucció d'una base. Cada línia es composa per:
 ; - l'identificador de l'acció
 ; - les cel·la on s'aplica l'acció (origen i destí si l'acció involucra dues cel·les)
 ; - el color (R)/(G)/(B) del qual ha estat pintada una casella/unitat si es tracta d'una acció PINTA
-; full-COORDS-length '(XX,YY) (XX,YY)' = 15 ; pA-full-length ' (XX,YY)' = 8 ; number width = 5 ; (XX,YY) width = 2
 (defun log-update (x y container-h updates &key (src-y y) bcol)
+    "Imprimeix el registre de les accions contingudes dins la llista 'updates' a partir de la posició (x,y)
+     i respectant l'alçada del panell 'container-h'"
     (if updates
         (let* ((act-upd (car updates))
                (action (car act-upd))
@@ -485,7 +490,7 @@
                (line-spacing 2)
                (line-h      (+ (* txt-scale BITMAP-HEIGHT) line-spacing))
                (in-bounds   (and src-y (<= (+ y (* line-h 2)) (+ src-y container-h))))
-               (action-y    (+ (if in-bounds y src-y) line-h)) ; (- y line-h)
+               (action-y    (+ (if in-bounds y src-y) line-h))
                (action-x    (+ x margin-x))
                (pB-x        (+ action-x 70))
                (pA-x        (if (or (eq action ACTION-CREATE-BALL) del-act) pB-X (+ action-x 35)))
@@ -501,6 +506,8 @@
 
 ; mètode que dibuixa i gestiona el contenidor de les accions dutes a terme
 (defun log-panel (frame-x frame-y frame-w frame-h updates turn)
+    "Dibuixa el contenidor del registre a la posició 'frame-(x,y)' amb dimensions 'frame-(w,h)' quan el torn 'turn' és 0,
+     i actualitza el mateix passant la llista d'actualitzacions 'updates' al mètode log-update"
     (let* ((frame-bord-thck 2)
            (shadow-thck 2)
            (inner-frame-h (- frame-h (* frame-bord-thck 2)))
@@ -510,49 +517,27 @@
                (set-color '(100 100 100))
                (fill-rect (+ frame-x shadow-thck) (- frame-y shadow-thck) frame-w shadow-thck)
                (fill-rect (+ frame-x frame-w) (- frame-y shadow-thck) shadow-thck (- frame-h shadow-thck))
-               (set-color SOFT-WHITE) ;upd block
-               (fill-rect (+ frame-x frame-bord-thck) (+ frame-y frame-bord-thck) inner-frame-w inner-frame-h)
-                ; TEMPORARY!!
-                ;;   (let* ((use-custom-cell-size t)
-                ;;          (tst-cell-size (if use-custom-cell-size 10 cell-size)))
-                ;;       (set-color BLACK)
-                ;;       (move (+ 100 board-container-size) 180)
-                ;;       (square-outline-rel tst-cell-size)
-                ;;       (move (1+ (+ 100 board-container-size)) (1+ 180)) 
-                ;;       (draw-ball (list 0 0 0 TEAM-1 0 (list ) 'r 0 0) tst-cell-size)
-                ;;     ;; Bolla: (TERRA COLOR BOLLA EQUIP ID COLORS-PINTAT COLOR-PROPI TR-PINTAR TR-MOURE)
-                ;;       (draw-str (strcat "this cell-size:    " tst-cell-size) (+ 58 board-container-size) 168 1)
-                ;;   (draw-str (strcat "board cell-size: " (- cell-size (* 2 CELL-BORD-THCK)))  (+ 47 board-container-size) 135 1))
-                ;; (set-color BACKGROUND-COL)
-                ;; (fill-rect (+ frame-x frame-bord-thck)       (+ frame-y frame-bord-thck) 
-                ;;           (- frame-w (* frame-bord-thck 2)) (- frame-h (* frame-bord-thck 2)))
-                ;; ;; (test-draw-base (+ board-container-size 20) 45 0 0 (- CELL-MIN-SIZE (* 2 CELL-BORD-THCK)) (- CELL-MAX-SIZE (* 2 CELL-BORD-THCK)))
-                ;; (test-draw-base (+ xi 20) 35 0 0 CELL-MIN-SIZE CELL-MAX-SIZE)
-               )
-            (t (set-color SOFT-WHITE) ;upd block
+               (set-color SOFT-WHITE)
+               (fill-rect (+ frame-x frame-bord-thck) (+ frame-y frame-bord-thck) inner-frame-w inner-frame-h))
+            (t (set-color SOFT-WHITE)
                (fill-rect (+ frame-x frame-bord-thck) (+ frame-y frame-bord-thck) inner-frame-w inner-frame-h)
                (set-color DEF-TEXT-COL)
-               (log-update frame-x frame-y inner-frame-h updates :bcol SOFT-WHITE) ;;(log-update frame-x (+ frame-y frame-h (- frame-bord-thck) (- 5)) update-log)
-               ))))
+               (log-update frame-x frame-y inner-frame-h updates :bcol SOFT-WHITE)))))
 
 ; controla l'actualització de la barra lateral mitjançant el posicionament i crida de tots els panells que el conformen
 (defun status-sidebar-upd (state xi &optional updates)
+    "Rep l'estat actual 'state', la posició absoluta de la barra lateral 'xi' i la llista d'accions 'updates' del torn actual"
     (let* ((turn (state-turn state))
            (team (if (oddp turn) TEAM-1 TEAM-2))
            (sidebar-w (- XLISP-WINDOW-WIDTH xi))
            (sidebar-h XLISP-WINDOW-HEIGHT)
            (log-frame-w 140)
            (log-frame-h 130))
-        (turn-counter-panel xi 345 sidebar-w team turn)
+        (turn-counter-panel xi 345 sidebar-w turn)
         (team-panel xi 295 sidebar-w team turn)
         (base-color-panel xi 225 sidebar-w (if (= turn 0) nil updates) turn)
         (stats-table xi sidebar-w state turn team)
         (log-panel (+ xi (round (/ (- sidebar-w log-frame-w) 2))) 20 log-frame-w log-frame-h updates turn)
-
-        ;; LAB  ;; (set-color BLACK) (move (+ 10 xi) 65) (square-outline-rel 18 18) (move (1+ (+ 10 xi)) (1+ 65)) (draw-lab (list 0 0 0 TEAM-1 0 0) 18)
-                ;; (let* ((rand (random 3)) (col (cond ((= rand 0) 'r) ((= rand 1) 'g) ((= rand 2) 'b))) (rand2 (random 2)) (team (if (= rand2 0) TEAM-1 TEAM-2)))
-                ;; (sidebar-color-manager (+ 10 xi) 45 (list (list ACTION-PAINT (list 0 0 (list LAND 'r BALL TEAM-1 12 (list col) col 0 0)) (list 0 0 (list LAND 'r BASE team 12))))))
-        
         (when (= turn 0)
             (let* ((ver-txt "LISP Paintball v1.0.0")
                    (txt-scale 1) (txt-len (get-str-width ver-txt txt-scale)))
@@ -560,64 +545,28 @@
 
 ; desencapsula el llistat d'actualizacions per a obtenir les cel·les a repintar en funció de l'acció realitzada
 (defun paint-changes (xi yi cell-size updates)
+    "Pinta els canvis de la llista 'updates' sobre el mapa ubicat a (xi,yi) amb cel·les de tamany 'cell-size'"
     (if updates
         (let* ((act-upd (car updates))
                (action (car act-upd))
                (pA (if (neq action ACTION-PAINT) (cadr act-upd) (caddr act-upd)))
                (pB (if (neq action ACTION-PAINT) (caddr act-upd) nil)))
-            ;; (when (eq action ACTION-MOVE) (draw-arrow xi yi (car pA) (cadr pA) (car pB) (cadr pB) cell-size))
             (repaint-cell xi yi (car pA) (cadr pA) (caddr pA) cell-size)
             (when pB (repaint-cell xi yi (car pB) (cadr pB) (caddr pB) cell-size))
-            ;; (princ (strcat "updates: " updates))(terpri)
-            ;; (set-color BLACK)
-            ;; (princ (strcat "act-udp: " act-upd))(terpri)
-            ;; (princ (strcat "action: " action)) (terpri)
-            ;; ;; (princ (strcat "pA:" pA)) 
-            ;; (princ (strcat " -> pAx=" (car pA) " pAy=" (cadr pA))) (terpri)
-            ;; ;; (princ (strcat "pB:" pB))
-            ;; (princ (strcat " -> pBx=" (car pB) " pAy=" (cadr pB))) (terpri)
             (paint-changes xi yi cell-size (cdr updates)))
         nil))
 
-; funció que repinta una cel·La concreta del mapa,
-; xi i yi fan referència al posicionament del mapa a l'interfície; tx i ty número de columna i fila
 (defun repaint-cell (xi yi tx ty cell cell-size)
+    "Repinta la cel·la 'cell' a les coordenades (tx,ty) del mapa ubicat a (xi,yi) amb tamany 'cell-size'"
     (let ((x (+ xi (* tx (- cell-size CELL-BORD-THCK))))
           (y (- yi (* ty (- cell-size CELL-BORD-THCK)))))
         (move x y)
         (draw-cell cell cell-size)))
 
-; TODO: fix arrow drawing
-(defun draw-arrow (xi yi ux uy tx ty cell-size)
-    (let* ((orig-x (+ xi (* ux (- cell-size CELL-BORD-THCK))))
-           (orig-y (- yi (* uy (- cell-size CELL-BORD-THCK))))
-           (dest-x (+ xi (* tx (- cell-size CELL-BORD-THCK))))
-           (dest-y (- yi (* ty (- cell-size CELL-BORD-THCK))))
-           (innr-s (- cell-size (* 2 CELL-BORD-THCK)))
-           (offs (round (/ innr-s 2)))
-           (sep-lin-y (- (round (/ (- cell-size CELL-BORD-THCK) 2)) 2))
-           (dif-lin-x 4))
-        (set-color BLACK)
-        ;; (princ (strcat "origin arrow coords: (" ux "," uy ")"))(terpri)
-        ;; (princ (strcat "destin arrow coords: (" tx "," ty ")"))(terpri)
-        ;; (princ (strcat "orig: x="  orig-x "  y=" orig-y))(terpri)
-        ;; (princ (strcat "dest: x="  dest-x "  y=" dest-y))(terpri)
-        ;; (princ (strcat "off-dir: " off-dir "  (car off-dir):" (car off-dir) "  (cadr off-dir):" (cadr off-dir))) (terpri)
-        (move (+ orig-x offs) (+ orig-y offs))
-        ;; (fill-rect x y 2 2)
-        ;; (draw (+ dest-x (* offs (car off-dir))) (+ dest-y (* offs (cadr off-dir))))
-        (draw (+ dest-x offs) (+ dest-y offs))
-        (move (+ orig-x offs dif-lin-x) (+ orig-y offs sep-lin-y))
-        (draw (+ dest-x offs) (+ dest-y offs sep-lin-y))
-        (move (+ orig-x offs dif-lin-x) (+ orig-y offs (- sep-lin-y)))
-        (draw (+ dest-x offs) (+ dest-y offs (- sep-lin-y)))
-        ;; (moverel (- dest-x) (- dest-y))
-        ))
-
 (defun draw-map (m xi yi row cell-size)
     "Recorr de forma recursiva el mapa 'm', mou el punter a la posició d'inici de cada fila i crida a la funció de dibuixat"
     (cond ((null m) nil)
-          (t (move xi (- yi (* row (- cell-size CELL-BORD-THCK)))) ; Adjusted to avoid double margin in-between cells
+          (t (move xi (- yi (* row (- cell-size CELL-BORD-THCK))))
              (draw-row (car m) cell-size)
              (draw-map (cdr m) xi yi (+ row 1) cell-size))))
 
@@ -630,21 +579,20 @@
 
 ; Requereix posicionament absolut previ
 (defun draw-cell (cell cell-size)
-    "Dibuixa la cel·la passada per paràmetre amb el tamany cell-size"
+    "Dibuixa la cel·la 'cell' passada per paràmetre amb el tamany 'cell-size'"
         (set-color DEF-MARG-COL)
         (square-outline-rel cell-size) ; pinta el quadrat
         (set-color (if (cell-type-water cell) WATER-COL (if PAINT-CELL-COL (key2color (cell-color cell) :color-class LAND-COL) LAND-COL)))
         (moverel CELL-BORD-THCK CELL-BORD-THCK)
         (fill-rect-rel (- cell-size (* CELL-BORD-THCK 2)) (- cell-size (* CELL-BORD-THCK 2)))
         (cond ((cell-has-base cell) (draw-base cell cell-size))
-              ((cell-has-lab  cell) (draw-lab cell cell-size) ) ;(draw-ball cell cell-size)) 
+              ((cell-has-lab  cell) (draw-lab cell cell-size) )
               ((cell-has-ball cell) (draw-ball cell cell-size))
               (t nil))
         (moverel (- CELL-BORD-THCK) (- CELL-BORD-THCK)))
 
-; TODO: FIX lab painting left offset
-; dibuixa una estructura de tipus laboratori de tamany "cell-size"
 (defun draw-lab (cell cell-size)
+    "Dibuixa una estructura de tipus laboratori de tamany 'cell-size'"
         (let* ((lab-t1 (cell-owned-by cell TEAM-1))
                (lab-t2 (cell-owned-by cell TEAM-2)) 
                (NEUTRAL-WHITE '(220 222 221))
@@ -656,23 +604,15 @@
                (max-inner-sp (- CELL-MAX-SIZE (* CELL-BORD-THCK 2)))
                (lab-size (max 4 (- cell-size (* CELL-BORD-THCK 2))))
                (g (/ lab-size max-inner-sp))
-               (pixl-size              (round g))
-               (tile-size              (round (* g 8)))
-               (refl-size              (round (* g 2)))
-               (cent-white-sq-w        (round (* g 12))) (cent-white-sq-h (round (* g 13)))
-               (no-refl-size           (round (* g 6)))
-               (no-refl-no-shadow-size (round (* g 4)))
-            ;;    (ul-tile-bcol-w (round (* g 4)))   (ul-tile-bcol-h (round (* g 6)))
-            ;;    (ul-tile-bcol-x (round (* g 2)))   (ul-tile-bcol-y (round (* g 10)))
-            ;;    (ul-tile-refl-w (round (* g 6)))   (ul-tile-refl-h tile-size)
-            ;;    (lr-tile-bcol-w (round (* g 6)))   (lr-tile-bcol-h tile-size)
-            ;;    (lr-tile-bcol-x tile-size)         (lr-tile-bcol-y 0)
-            ;;    (lr-tile-refl-x (round (* g 14)))  (lr-tile-refl-y 0)
-               )
-            ;; (set-color BLACK)
-            ;; (princ (strcat "ls=" lab-size)) (terpri) (princ (strcat "g=" g))(terpri)
-            ;; (princ (strcat "pixl-size= " pixl-size)) (terpri)
-            ;; (princ (strcat "tile-size= " tile-size "   refl-size= " refl-size)) (terpri)
+               (exc-lst '(11 15 13))
+               (func (if (member cell-size exc-lst) 'ceiling 'round))
+               (pixl-size              (funcall func g))
+               (tile-size              (funcall func (* g 8)))
+               (refl-size              (funcall func (* g 2)))
+               (cent-white-sq-w        (funcall func (* g 12))) (cent-white-sq-h (funcall func (* g 13)))
+               (no-refl-size           (funcall func (* g 6)))
+               (no-refl-no-shadow-size (funcall func (* g 4)))
+               (sc-offs1 (if (or (= cell-size 11) (= cell-size 13)) pixl-size 0)))
             (set-color SHADOW-WHITE)
             (fill-rect-rel tile-size tile-size)
             (moverel tile-size tile-size)
@@ -687,68 +627,41 @@
             (moverel refl-size 0)
             (set-color PINKIER-RED)
             (fill-rect-rel no-refl-size tile-size)
-            (moverel 0 refl-size)
+            (moverel 0 (- refl-size sc-offs1))
             (set-color NEUTRAL-RED)
             (fill-rect-rel no-refl-no-shadow-size no-refl-size)
-            (moverel no-refl-size (- (+ tile-size refl-size)))
+            (moverel no-refl-size (+ (- (+ tile-size refl-size)) sc-offs1))
             (fill-rect-rel no-refl-size tile-size)
-            (moverel no-refl-size 0)
+            (moverel (- no-refl-size sc-offs1) 0)
             (set-color BRIGHT-RED)
             (fill-rect-rel refl-size tile-size)
-            (moverel (- (+ tile-size no-refl-size)) 0)))
-
-;;; !! TEMPORARY !!
-(defun test-draw-base (x y row col lower-bound upper-bound)
-    (when (<= lower-bound upper-bound)
-        (let* ((sep 30)
-               (act-cs lower-bound)
-               (col-qty 4)
-               (next-col (if (= col (1- col-qty)) 0 (1+ col)))
-               (next-row (if (= col (1- col-qty)) (1+ row) row))
-               (act-x (+ x (* sep col)))
-               (act-y (+ y (* sep row))))
+            (moverel (+ (- (+ tile-size no-refl-size)) sc-offs1) 0)
             (set-color BLACK)
-            (move act-x act-y)
-            (square-outline-rel act-cs)
-            (move (+ act-x CELL-BORD-THCK) (+ act-y CELL-BORD-THCK)) 
-            (draw-ball (list 0 0 0 TEAM-1 0 (list 'g 'b) 'r 0 0) act-cs)
-            (draw-str (to-string act-cs) (+ act-x 2) (- act-y 10) 1)
-            (test-draw-base x y next-row next-col (1+ lower-bound) upper-bound))))
+            (moverel -1 -1)
+            (square-outline-rel cell-size CELL-BORD-THCK)
+            (moverel 1 1)))
 
-; TODO: fix small px size ball resizing
-; dibuixa una unitat de tipus bolla de tamany "cell-size"
 (defun draw-ball (cell cell-size)
+    "Dibuixa una unitat de tipus bolla de tamany 'cell-size'"
     (let* ((max-inner-sp (- CELL-MAX-SIZE (* CELL-BORD-THCK 2)))
-           (base-size (max 4 (- cell-size (* CELL-BORD-THCK 2))))
+           (cs (if (or (eq cell-size 12) (eq cell-size 16)) (1- cell-size) cell-size))
+           (base-size (max 4 (- cs (* CELL-BORD-THCK 2))))
            (g (/ base-size max-inner-sp))
-           (diag-size-std (round (* g 7)));8
-           (diag-size-sm  (round (* g 6)));7
-           (dist-diag-sep (round (* g 9)))
-           (spacing (round (* g 2)))
-           (spacing4 (round (* g 4)))
-           (border-type 2) ; 0: None | 1: Single | 2: Double ;TEMPORARY
-
-        ;;    (line-thck (round (* cell-size 0.0625))) 
-        ; V1 Thicker Background color strip
-        ;;    (delim-x (round (* g 5))) (delim-sep (round (* g 6))) (delim-len (round (* g 12))) (delim-y   (round (* g 2)))
-        ; V2 Slimmer Background color strip
-        ;;    (delim-x (round (* g 6))) (delim-sep (round (* g 4))) (delim-len (round (* g 14))) (delim-y   (round (* g 1)))
-        ;;    ; V1 Color Distribution
-        ;;    (tile1-x (round (* g 2)))  (tile1-y (round (* g 4))) (tile2-x (round (* g 10))) (tile2-y (round (* g 4))) (tiles-h (round (* g 8)))
-           
-                                    ; tile1-y = 1 for cell-size 15
-           (tile1-x (round (* g 1))) (tile1-y (round (* g 2))) ; V2 Color Distribution
-           (tile2-x (round (* g 9))) (tile2-y (round (* g 2)))
-           (tiles-h (round (* g 12)))
-
-        ;;    ; Central Triangles small (V1)
-        ;;    (cent-triang-l-x (round (* g 5))) (cent-triang-l-y (round (* g 5))) (cent-triang-r-x (round (* g 8))) (cent-triang-r-y (round (* g 5))) (cent-triang-h  (round (* g 6)))
-        ;cs 15 ;;(cent-triang-l-x (round (* g 5))) (cent-triang-l-y (round (* g 5))) ; Central Triangles big (V2)
-        ;;    (cent-triang-r-x (round (* g 9))) (cent-triang-r-y (round (* g 5)))
-
-           (cent-triang-l-x (round (* g 4))) (cent-triang-l-y (round (* g 4))) ; Central Triangles big (V2)
-           (cent-triang-r-x (round (* g 8))) (cent-triang-r-y (round (* g 4)))
-           (cent-triang-h   (round (* g 8)))
+           (norm-lst '(14 17 18))
+           (func (if (member cell-size norm-lst) 'round 'truncate))
+           (ver1 (member cell-size norm-lst))
+           (diag-size-std (funcall func (* g 7)))
+           (diag-size-sm  (funcall func (* g 6)))
+           (dist-diag-sep (funcall func (* g 9)))
+           (spacing (funcall func (* g 2)))
+           (spacing4 (funcall func (* g 4)))
+           (border-type 2)
+           (tile1-x (funcall func (* g 1))) (tile1-y (funcall func (* g 2)))
+           (tile2-x (funcall func (* g 9))) (tile2-y (funcall func (* g 2)))
+           (tiles-h (funcall func (* g 12)))
+           (cent-triang-l-x (funcall func (* g 4))) (cent-triang-l-y (funcall func (* g 4)))
+           (cent-triang-r-x (funcall func (* g 8))) (cent-triang-r-y (funcall func (* g 4)))
+           (cent-triang-h   (funcall func (* g 8)))
            (cell-own-col (cell-unit-color cell))
            (cell-oth-col (remove cell-own-col (cell-unit-paint cell)))
            (ball-backg-col  (key2color cell-own-col)) ; COLOR PROPI
@@ -756,38 +669,20 @@
            (ball-paint-col1 (if (car ball-paint-cols)  (car ball-paint-cols)  ball-backg-col))
            (ball-paint-col2 (if (cadr ball-paint-cols) (cadr ball-paint-cols) ball-backg-col))
            (team-col (if (cell-owned-by cell TEAM-1) '(118 118 0) '(136 254 255)))
-
-           ; TEMPORARY
-           (ver1 t)  ; V1 Colors pintats laterals, central color bolla | V2 Colors pintats centrals, laterals color bolla
-        ;;    (ver1 (cell-owned-by cell TEAM-1))
            (cent-l-triang-col (if ver1 ball-backg-col  ball-paint-col1))
            (cent-r-triang-col (if ver1 ball-backg-col  ball-paint-col2))
            (lsided-triang-col (if ver1 ball-paint-col1 ball-backg-col))
            (rsided-triang-col (if ver1 ball-paint-col2 ball-backg-col)))
-
-        ;; (princ (strcat "dball cs=" base-size)) (terpri) (princ (strcat "g=" g)) (terpri)
-        ;; (princ (strcat "backg-col: " ball-backg-col)) (terpri)
-        ;; (princ (strcat "own-col: " cell-own-col)) (princ (strcat "  oth-col: " cell-oth-col)) (terpri)
-        ;; (princ (strcat "paint-col: " ball-paint-cols)) (terpri)
-        
         (cond ((>= border-type 1)
             (set-color team-col)
             (moverel (- diag-size-std 1) 0)
             (drawrel (- diag-size-std) diag-size-std)
             (moverel 1 spacing)
-
-            ;; (moverel 0 -1) ;cs 15
             (drawrel diag-size-std diag-size-std)
-            ;; (moverel 0 1)
-            
             (moverel (+ diag-size-std spacing -1) (- diag-size-std))
             (drawrel (- diag-size-std) diag-size-std)
             (moverel 1 (- (+ (* diag-size-std 2) spacing)))
-
-            ;; (moverel -1 0) ;cs 15
             (drawrel diag-size-std diag-size-std)
-            ;; (moverel 1 0)
-
             (moverel (- (+ (* diag-size-std 2) spacing)) (- diag-size-std))
             (cond ((>= border-type 2) 
                 (moverel (- diag-size-sm 1) 0) 
@@ -799,67 +694,64 @@
                 (moverel  1 (- (+ (* diag-size-sm 2) spacing4)))
                 (drawrel diag-size-sm diag-size-sm)
                 (moverel (- (+ (* diag-size-sm 2) spacing4)) (- diag-size-sm))))))
-        ;; (moverel 1 1)
-        (set-color ball-backg-col) ; Fill Ball with background color
+        (set-color ball-backg-col)
         (draw-triangle-iso base-size 'LPT)
-        (moverel (round (/ base-size 2)) 0)
+        (moverel (funcall func (/ base-size 2)) 0)
         (draw-triangle-iso (1+ base-size) 'RPT)
-        (moverel (- (round (/ base-size 2))) 0)
-        ;; (moverel -1 -1)
-        (cond (ver1 (set-color lsided-triang-col) ; 1st color paint
+        (moverel (- (funcall func (/ base-size 2))) 0)
+        (cond (ver1 (set-color lsided-triang-col)
                     (moverel tile1-x tile1-y)
                     (draw-triangle-iso tiles-h 'LPT)
                     (moverel (- tile1-x) (- tile1-y))
-                    (set-color rsided-triang-col) ; 2nd color paint
+                    (set-color rsided-triang-col)
                     (moverel tile2-x tile2-y)
                     (draw-triangle-iso tiles-h 'RPT)
                     (moverel (- tile2-x) (- tile2-y))))
-        (set-color cent-l-triang-col) ; Central triangles 
+        (set-color cent-l-triang-col)
         (moverel cent-triang-l-x cent-triang-l-y)
-        ;; (moverel 1 0) ;cs 15
         (draw-triangle-iso cent-triang-h 'LPT)
-        ;; (moverel -1 0)
         (moverel (- cent-triang-l-x) (- cent-triang-l-y))
         (set-color cent-r-triang-col)
         (moverel cent-triang-r-x cent-triang-r-y)
-        ;; (moverel -1 0) ;cs 15
         (draw-triangle-iso cent-triang-h 'RPT)
-        ;; (moverel 1 0)
-        (moverel (- cent-triang-r-x) (- cent-triang-r-y))))
+        (moverel (- cent-triang-r-x) (- cent-triang-r-y))
+        (set-color BLACK)
+        (moverel -1 -1)
+        (square-outline-rel cell-size CELL-BORD-THCK)
+        (moverel 1 1)))
 
-; dibuixa una unitat de tipus base de tamany "cell-size"
 (defun draw-base (cell cell-size)
+    "Dibuixa una unitat de tipus base de tamany 'cell-size'"
     (let* ((max-inner-sp (- CELL-MAX-SIZE (* CELL-BORD-THCK 2)))
            (base-size (max 4 (- cell-size (* CELL-BORD-THCK 2))))
-           (g (/ base-size max-inner-sp)) ; base-size / reference-size ratio (decimal)
+           (g (/ base-size max-inner-sp)) ; tamany de la base / tamany de referència (decimal)
            (hires-icon (> base-size 8))
            (base-team1 (cell-owned-by cell TEAM-1))
-           (BASE-COL1 (if base-team1 '(118 118 0)   '(0 117 118)))   ; Darkest
+           (BASE-COL1 (if base-team1 '(118 118 0)   '(0 117 118)))
            (BASE-COL2 (if base-team1 '(189 189 0)   '(0 188 189)))
            (BASE-COL3 (if base-team1 '(229 229 0)   '(0 228 229)))
            (BASE-COL4 (if base-team1 '(240 240 125) '(124 240 240)))
-           (BASE-COL5 (if base-team1 '(255 255 137) '(136 254 255)))) ; Lightest
+           (BASE-COL5 (if base-team1 '(255 255 137) '(136 254 255))))
           (if hires-icon
-            ; Original Version
             (let ((corn-sm-sq (round (* cell-size 0.1875)))
                   (corn-bg-sq (round (* cell-size 0.3125)))
                   (cent-sm-sq (round (* cell-size 0.3333)))
                   (cent-bg-sq (round (* cell-size 0.6250)))
-                  (dist-corn-sm-sq (round (* g 13))) ; Distance in-between small squares
-                  (dist-corn-bg-sq (round (* g 10)));11
+                  (dist-corn-sm-sq (round (* g 13)))
+                  (dist-corn-bg-sq (round (* g 10)))
                   (dist-cent-sm-sq (round (* g 5)))
                   (dist-cent-bg-sq (round (* g 3))))
-                (set-color BASE-COL3)   ; background square
+                (set-color BASE-COL3)
                 (fill-rect-rel base-size base-size)
-                (set-color BASE-COL5)   ; clearest square
+                (set-color BASE-COL5)
                 (moverel dist-cent-bg-sq dist-cent-bg-sq)
                 (fill-rect-rel cent-bg-sq cent-bg-sq)
                 (moverel (- dist-cent-bg-sq) (- dist-cent-bg-sq))
-                (set-color BASE-COL4)   ; central square
+                (set-color BASE-COL4)
                 (moverel dist-cent-sm-sq dist-cent-sm-sq)
                 (fill-rect-rel cent-sm-sq cent-sm-sq)
                 (moverel (- dist-cent-sm-sq) (- dist-cent-sm-sq))
-                (set-color BASE-COL2)   ; corners big squares
+                (set-color BASE-COL2)
                 (fill-rect-rel corn-bg-sq corn-bg-sq)
                 (moverel 0 dist-corn-bg-sq)
                 (fill-rect-rel corn-bg-sq corn-bg-sq)
@@ -868,7 +760,7 @@
                 (moverel 0 (- dist-corn-bg-sq))
                 (fill-rect-rel corn-bg-sq corn-bg-sq)
                 (moverel (- dist-corn-bg-sq) 0)
-                (set-color BASE-COL1)  ; corners small squares
+                (set-color BASE-COL1)
                 (fill-rect-rel corn-sm-sq corn-sm-sq)
                 (moverel 0 dist-corn-sm-sq)
                 (fill-rect-rel corn-sm-sq corn-sm-sq)
@@ -877,18 +769,17 @@
                 (moverel 0 (- dist-corn-sm-sq))
                 (fill-rect-rel corn-sm-sq corn-sm-sq)
                 (moverel (- dist-corn-sm-sq) 0))
-            ; Simple Version
             (let ((corn-sq (round (* cell-size 0.25)))
                   (cent-sq (round (* cell-size 0.50)))
                   (dist-corn-sq (round (* g 12)))
                   (dist-cent-sq (round (* g 4))))
-                (set-color BASE-COL2)     ; background square
+                (set-color BASE-COL2)
                 (fill-rect-rel base-size base-size)
-                (set-color BASE-COL4)     ; central square
+                (set-color BASE-COL4)
                 (moverel dist-cent-sq dist-cent-sq)
                 (fill-rect-rel cent-sq cent-sq)
                 (moverel (- dist-cent-sq) (- dist-cent-sq))
-                (set-color BASE-COL1)     ; corners small squares
+                (set-color BASE-COL1)
                 (fill-rect-rel corn-sq corn-sq)
                 (moverel 0 dist-corn-sq)
                 (fill-rect-rel corn-sq corn-sq)
@@ -900,6 +791,8 @@
 
 ; dibuixa la marca d'aigua representativa del joc LISP Paintball (pura estètica)
 (defun draw-watermark (xi yi container-w container-h scale &optional (b nil))
+    "Dibuixa la marca d'aigua amb tamany 'scale' centrada al contenidor ubicat a la posició (xi,yi)
+     amb dimensions 'container-(w,h)'"
     (let* ((col    (if b '(220 220 220) '(245 245 245)))
            (col2   (if b '(200 200 200) '(240 240 240)))
            (sh-col (if b '(200 200 200) '(240 240 240)))
