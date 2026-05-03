@@ -13,10 +13,8 @@
 ;;   antigues només es descarten si contenien bolles, perquè són l'únic element que es
 ;;   mou.
 ;; - La base crea bolles només si té pintura suficient i hi ha una casella adjacent
-;;   buida, tal com exigeix la lògica del joc. El color de la nova bolla es tria segons
-;;   els colors que falten als enemics coneguts: les bases enemigues pesen més que
-;;   les bolles perquè destruir la base és l'objectiu principal. Si no hi ha enemics
-;;   coneguts, la base alterna colors per mantenir varietat.
+;;   buida, tal com exigeix la lògica del joc. El color de la nova bolla es tria per
+;;   equilibrar els colors de les bolles pròpies conegudes.
 ;; - Les bolles primer intenten pintar el millor objectiu dins rang: base enemiga,
 ;;   bolla enemiga o laboratori.
 ;; - Per moure's, les bolles avancen en una direcció fixa segons el seu id-unitat
@@ -99,6 +97,7 @@
 (defun agent-sng656-info-id        (info) (nth 3  info))
 (defun agent-sng656-info-unit      (info) (nth 4  info))
 (defun agent-sng656-info-coord     (info) (nth 5  info))
+(defun agent-sng656-info-own-color (info) (nth 7  info))
 (defun agent-sng656-info-tr-paint  (info) (nth 8  info))
 (defun agent-sng656-info-tr-move   (info) (nth 9  info))
 (defun agent-sng656-info-vision    (info) (nth 10 info))
@@ -120,6 +119,7 @@
 (defun agent-sng656-cell-element  (cell) (nth 3 cell))
 (defun agent-sng656-cell-team     (cell) (nth 4 cell))
 (defun agent-sng656-cell-painted  (cell) (nth 5 cell))
+(defun agent-sng656-cell-own-color (cell) (nth 6 cell))
 
 ; predicats sobre cel·les del mapa
 (defun agent-sng656-is-land  (cell) (eq (agent-sng656-cell-type cell) AGENT-SNG656-LAND))
@@ -221,38 +221,36 @@
                     ; veí no serveix: provam el següent offset
                     (agent-sng656-find-empty-neighbour src entries (cdr offsets))))))
 
-; pes d'una cel·la enemiga segons el seu tipus
-(defun agent-sng656-color-weight (cell)
-    (cond ((agent-sng656-is-base cell) 10)
-          ((agent-sng656-is-ball cell) 1)
-          (t 0)))
+; compta quantes bolles pròpies conegudes hi ha d'un color concret
+(defun agent-sng656-own-balls-color-count (entries team color)
+    (agent-sng656-sum
+        (mapcar (lambda (e)
+                    (let ((cell (agent-sng656-entry-cell e)))
+                         (agent-sng656-bool-int
+                             (and (agent-sng656-is-ball cell)
+                                  (eq (agent-sng656-cell-team cell) team)
+                                  (eq (agent-sng656-cell-own-color cell) color)))))
+                entries)))
 
-; vector (r g b) on cada element val 1 si la unitat NO està pintada amb aquell color
-(defun agent-sng656-missing-counts (cell)
-    (let ((w (agent-sng656-color-weight cell))
-          (painted (agent-sng656-cell-painted cell)))
-         (mapcar (lambda (c) (if (member c painted) 0 w)) AGENT-SNG656-RGB)))
+; vector (r g b) amb el total de bolles pròpies conegudes de cada color
+(defun agent-sng656-own-balls-color-counts (entries team)
+    (mapcar (lambda (color) (agent-sng656-own-balls-color-count entries team color))
+            AGENT-SNG656-RGB))
 
-; suma vectorial (r g b): per cada enemic visible, agrega missing-counts ponderat
-(defun agent-sng656-missing-total (entries team)
-    (reduce #'agent-sng656-add
-            (mapcar (lambda (e) (agent-sng656-missing-counts (agent-sng656-entry-cell e)))
-                    (append (agent-sng656-enemy-bases entries team)
-                            (agent-sng656-enemy-balls entries team)))
-            :initial-value '(0 0 0)))
-
-; tria un color per crear la bolla:
-;   - si veiem enemics, agreguem els colors que els falten ponderats per tipus i triem el màxim
-;   - si no, rotam entre r/g/b segons (mod ronda 3) per variar
+; tria un color per crear la bolla: el color menys present entre les bolles pròpies conegudes
 (defun agent-sng656-base-pick-color (info entries)
     (let* ((team (agent-sng656-info-team info))
-           (totals (agent-sng656-missing-total entries team))
-           (idx (agent-sng656-argmax totals)))
-        (if (> (nth idx totals) 0)
-            ; hi ha enemics coneguts: triem el color que més falta als objectius
-            (nth idx AGENT-SNG656-RGB)
-            ; no tenim informació ofensiva: alternam colors per no produir sempre igual
-            (nth (mod (agent-sng656-info-turn info) (length AGENT-SNG656-RGB)) AGENT-SNG656-RGB))))
+           (counts (agent-sng656-own-balls-color-counts entries team))
+           (min-count (reduce 'min counts)))
+          (nth (mod (agent-sng656-info-turn info)
+                    (length (remove-if (lambda (color)
+                                           (/= (agent-sng656-own-balls-color-count entries team color)
+                                               min-count))
+                                       AGENT-SNG656-RGB)))
+               (remove-if (lambda (color)
+                              (/= (agent-sng656-own-balls-color-count entries team color)
+                                  min-count))
+                          AGENT-SNG656-RGB))))
 
 ; estratègia de la base:
 ;   - si tenim menys pintura que el cost d'una bolla, no fem res
@@ -313,9 +311,13 @@
 (defun agent-sng656-best-paint-target (info entries)
     (let* ((src (agent-sng656-info-coord info))
             (team (agent-sng656-info-team info))
+            (own-color (agent-sng656-info-own-color info))
             (in-range (remove-if (lambda (e)
-                                      (> (agent-sng656-dist (agent-sng656-entry-coord e) src)
-                                         AGENT-SNG656-PAINT-RANGE))
+                                      (let ((cell (agent-sng656-entry-cell e)))
+                                           (or (> (agent-sng656-dist (agent-sng656-entry-coord e) src)
+                                                  AGENT-SNG656-PAINT-RANGE)
+                                               (and (agent-sng656-is-ball cell)
+                                                    (member own-color (agent-sng656-cell-painted cell))))))
                                   entries)))
         (agent-sng656-best-entry in-range src team)))
 
@@ -415,13 +417,33 @@
     (nth (mod (agent-sng656-info-id info) (length AGENT-SNG656-NEIGH-OFFSETS))
          AGENT-SNG656-NEIGH-OFFSETS))
 
-; pas exploratori: avança sempre en la mateixa direcció si la casella és buida coneguda
+; tria el millor veí exploratori: terra buida amb més veïns desconeguts
+(defun agent-sng656-best-unknown-neighbour-rec (src entries offsets best)
+    (cond ((null offsets) best)
+          (t (let* ((dst (agent-sng656-add src (car offsets)))
+                    (entry (agent-sng656-entry-at entries dst))
+                    (cell (agent-sng656-entry-cell entry)))
+                   (if (and cell (agent-sng656-is-empty cell))
+                       (let* ((unknown (agent-sng656-unknown-neighbours dst entries))
+                              (best-new (if (or (null best) (> unknown (cadr best)))
+                                            (list dst unknown)
+                                            best)))
+                             (agent-sng656-best-unknown-neighbour-rec src entries (cdr offsets) best-new))
+                       (agent-sng656-best-unknown-neighbour-rec src entries (cdr offsets) best))))))
+
+(defun agent-sng656-best-unknown-neighbour (src entries)
+    (let ((best (agent-sng656-best-unknown-neighbour-rec src entries AGENT-SNG656-NEIGH-OFFSETS nil)))
+         (if best (car best) nil)))
+
+; pas exploratori: prova la direcció preferida; si està bloquejada, tria el veí que obre més mapa
 (defun agent-sng656-directional-step (info entries)
     (let* ((dst (agent-sng656-add (agent-sng656-info-coord info)
                                   (agent-sng656-explore-offset info)))
-           (entry (agent-sng656-entry-at entries dst))
-           (cell (agent-sng656-entry-cell entry)))
-          (if (and cell (agent-sng656-is-empty cell)) dst nil)))
+            (entry (agent-sng656-entry-at entries dst))
+            (cell (agent-sng656-entry-cell entry)))
+          (if (and cell (agent-sng656-is-empty cell))
+              dst
+              (agent-sng656-best-unknown-neighbour (agent-sng656-info-coord info) entries))))
 
 ; pas greedy que només accepta acostar-se realment al target
 (defun agent-sng656-step-closer (src entries target)
