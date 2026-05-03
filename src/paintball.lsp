@@ -143,6 +143,7 @@
           (t (cons (car lst) (unique (cdr lst))))))
 
 (defun neq (a b) (not (eq a b)))
+(defun opp-team (team) (if (eq team TEAM-1) TEAM-2 TEAM-1))
 
 ; **************************************************
 ; MAP
@@ -679,4 +680,4 @@
         (graphics-upd state)
         (game-loop (state-turn state 1))))
 
-; (paintball "tiny") ; descomentar per executar la partida automàticament en carregar el fitxer
+(paintball "tiny") ; descomentar per executar la partida automàticament en carregar el fitxer
