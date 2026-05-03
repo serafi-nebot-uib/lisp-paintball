@@ -176,6 +176,8 @@
     "Retorna cert si els símbols 'a' i 'b' no són el mateix objecte segons 'eq'."
     (not (eq a b)))
 
+(defun opp-team (team) (if (eq team TEAM-1) TEAM-2 TEAM-1))
+
 ; **************************************************
 ; MAP
 ; **************************************************
