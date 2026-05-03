@@ -18,14 +18,10 @@
 ;;   les bolles perquè destruir la base és l'objectiu principal. Si no hi ha enemics
 ;;   coneguts, la base alterna colors per mantenir varietat.
 ;; - Les bolles primer intenten pintar el millor objectiu dins rang: base enemiga,
-;;   bolla enemiga o laboratori. La puntuació baixa
-;;   amb l'antiguitat de la informació perquè una observació recent és més valuosa
-;;   que una posició antiga de memòria.
-;; - Per moure's, les bolles ataquen primer objectius tàctics coneguts. Si no hi ha
-;;   enemics ni laboratoris, les bolles exploradores cerquen fronteres: caselles de
-;;   terra buida conegudes amb veïns desconeguts. La millor frontera és la que obre
-;;   més cel·les desconegudes; en empat, es prefereix anar més lluny de la nostra
-;;   base i, finalment, triar l'opció més propera a la bolla actual.
+;;   bolla enemiga o laboratori.
+;; - Per moure's, les bolles avancen en una direcció fixa segons el seu id-unitat
+;;   mentre no hi hagi cap objectiu enemic a la memòria compartida. Quan es coneix
+;;   una base o bolla enemiga, passen a mode atacant i s'hi acosten.
 
 ; **************************************************
 ; CONSTANTS
@@ -100,6 +96,7 @@
 (defun agent-sng656-info-turn      (info) (nth 0  info))
 (defun agent-sng656-info-team      (info) (nth 1  info))
 (defun agent-sng656-info-paint     (info) (nth 2  info))
+(defun agent-sng656-info-id        (info) (nth 3  info))
 (defun agent-sng656-info-unit      (info) (nth 4  info))
 (defun agent-sng656-info-coord     (info) (nth 5  info))
 (defun agent-sng656-info-tr-paint  (info) (nth 8  info))
@@ -289,19 +286,17 @@
           ((agent-sng656-is-lab  cell) 50)
           (t 0)))
 
-; puntuació d'una entrada: la base menys l'antiguitat (cap a 0 mai)
-; així informació recent és preferida sense descartar del tot la antiga
-(defun agent-sng656-score-entry (entry team turn)
-    (let ((age (- turn (agent-sng656-entry-turn entry)))
-          (raw (agent-sng656-score-cell (agent-sng656-entry-cell entry) team)))
-         (max 0 (- raw age))))
+; puntuació d'una entrada: només depèn del valor tàctic de la cel·la.
+; Les entrades velles ja es filtren en actualitzar la memòria.
+(defun agent-sng656-score-entry (entry team)
+    (agent-sng656-score-cell (agent-sng656-entry-cell entry) team))
 
 ; entre una llista d'entries, retorna la millor entry
 ; criteris: més puntuació primer, després més propera a src; nil si cap puntua > 0
-(defun agent-sng656-best-entry (entries src team turn)
+(defun agent-sng656-best-entry (entries src team)
     (car (reduce (lambda (best e)
-                    (let* ((s (agent-sng656-score-entry e team turn))
-                           (d (agent-sng656-dist (agent-sng656-entry-coord e) src)))
+                    (let* ((s (agent-sng656-score-entry e team))
+                            (d (agent-sng656-dist (agent-sng656-entry-coord e) src)))
                         (cond ; puntuació zero significa que aquesta entrada no és objectiu
                               ((zerop s) best)
                               ; primera entrada útil trobada: inicialitzam el millor candidat
@@ -317,13 +312,12 @@
 ; millor objectiu a pintar: entry dins del rang de pintar amb puntuació > 0
 (defun agent-sng656-best-paint-target (info entries)
     (let* ((src (agent-sng656-info-coord info))
-           (team (agent-sng656-info-team info))
-           (turn (agent-sng656-info-turn info))
-           (in-range (remove-if (lambda (e)
-                                     (> (agent-sng656-dist (agent-sng656-entry-coord e) src)
-                                        AGENT-SNG656-PAINT-RANGE))
-                                 entries)))
-        (agent-sng656-best-entry in-range src team turn)))
+            (team (agent-sng656-info-team info))
+            (in-range (remove-if (lambda (e)
+                                      (> (agent-sng656-dist (agent-sng656-entry-coord e) src)
+                                         AGENT-SNG656-PAINT-RANGE))
+                                  entries)))
+        (agent-sng656-best-entry in-range src team)))
 
 ; compta quants veïns d'una coord encara no són a la memòria/visió compartida
 (defun agent-sng656-unknown-neighbours (coord entries)
@@ -381,9 +375,16 @@
 ; millor objectiu tàctic conegut: enemic o laboratori no propi
 (defun agent-sng656-best-tactical-target (info entries)
     (agent-sng656-best-entry entries
-                             (agent-sng656-info-coord info)
-                             (agent-sng656-info-team info)
-                             (agent-sng656-info-turn info)))
+                              (agent-sng656-info-coord info)
+                              (agent-sng656-info-team info)))
+
+; objectiu enemic conegut per activar el mode atacant: base o bolla rival, no labs
+(defun agent-sng656-best-enemy-target (info entries)
+    (let ((team (agent-sng656-info-team info)))
+         (agent-sng656-best-entry (append (agent-sng656-enemy-bases entries team)
+                                          (agent-sng656-enemy-balls entries team))
+                                  (agent-sng656-info-coord info)
+                                  team)))
 
 ; recorre els 8 offsets veïns recursivament i tria el que minimitza d² al target
 ; cada candidat ha de ser terra buida i present a entries (això garanteix que sigui dins del mapa)
@@ -409,6 +410,19 @@
     (let ((best (agent-sng656-best-step-rec src entries target AGENT-SNG656-NEIGH-OFFSETS nil)))
          (if best (car best) nil)))
 
+; direcció estable d'exploració segons id-unitat mod 8
+(defun agent-sng656-explore-offset (info)
+    (nth (mod (agent-sng656-info-id info) (length AGENT-SNG656-NEIGH-OFFSETS))
+         AGENT-SNG656-NEIGH-OFFSETS))
+
+; pas exploratori: avança sempre en la mateixa direcció si la casella és buida coneguda
+(defun agent-sng656-directional-step (info entries)
+    (let* ((dst (agent-sng656-add (agent-sng656-info-coord info)
+                                  (agent-sng656-explore-offset info)))
+           (entry (agent-sng656-entry-at entries dst))
+           (cell (agent-sng656-entry-cell entry)))
+          (if (and cell (agent-sng656-is-empty cell)) dst nil)))
+
 ; pas greedy que només accepta acostar-se realment al target
 (defun agent-sng656-step-closer (src entries target)
     (let ((step (agent-sng656-step-towards src entries target)))
@@ -425,19 +439,19 @@
               (agent-sng656-step-towards src entries target-coord)
               nil)))
 
-; moviment greedy: avança cap al millor objectiu conegut, tàctic o exploratori
+; moviment greedy: explora en direcció fixa fins que hi ha objectiu enemic; llavors ataca
 (defun agent-sng656-best-move-step (info entries)
     (let* ((src (agent-sng656-info-coord info))
-           (target (agent-sng656-best-tactical-target info entries))
-           (target-coord (if target (agent-sng656-entry-coord target) nil)))
-          (cond ((null target-coord)
-                 (agent-sng656-frontier-step info entries))
-                ; si ja podem pintar l'objectiu, no ens n'allunyam
-                ((<= (agent-sng656-dist src target-coord) AGENT-SNG656-PAINT-RANGE)
-                 nil)
-                ; si l'atac greedy queda bloquejat, deixam que l'exploració cerqui alternativa
-                (t (let ((step (agent-sng656-step-closer src entries target-coord)))
-                       (if step step (agent-sng656-frontier-step info entries)))))))
+            (target (agent-sng656-best-enemy-target info entries))
+            (target-coord (if target (agent-sng656-entry-coord target) nil)))
+           (cond ((null target-coord)
+                  (agent-sng656-directional-step info entries))
+                 ; si ja podem pintar l'objectiu, no ens n'allunyam
+                 ((<= (agent-sng656-dist src target-coord) AGENT-SNG656-PAINT-RANGE)
+                  nil)
+                 ; si l'atac greedy queda bloquejat, no tornam a explorar mentre hi ha enemic conegut
+                 (t (let ((step (agent-sng656-step-closer src entries target-coord)))
+                        step)))))
 
 ; estratègia de la bolla:
 ;   - intenta pintar el millor objectiu en rang (si tr-paint < 1)
