@@ -3,7 +3,7 @@
 ;; Estudiants: ABC, XYZ.
 ;; Professor: XXX.
 ;; Lliurament: primera convocatòria.
-;; Fitxer de l'agent intel·ligent jgr448.
+;; Fitxer de l'agent intel·ligent JGR448.
 ;;
 ;; Estratègia general de l'agent:
 ;; - Cada unitat combina la seva visió actual amb la memòria compartida de l'equip.
@@ -13,19 +13,14 @@
 ;;   antigues només es descarten si contenien bolles, perquè són l'únic element que es
 ;;   mou.
 ;; - La base crea bolles només si té pintura suficient i hi ha una casella adjacent
-;;   buida, tal com exigeix la lògica del joc. El color de la nova bolla es tria segons
-;;   els colors que falten als enemics coneguts: les bases enemigues pesen més que
-;;   les bolles perquè destruir la base és l'objectiu principal. Si no hi ha enemics
-;;   coneguts, la base alterna colors per mantenir varietat.
+;;   buida, tal com exigeix la lògica del joc. El color de la nova bolla rota entre
+;;   r/g/b segons el torn, sense analitzar la memòria, per mantenir l'agent lleuger.
 ;; - Les bolles primer intenten pintar el millor objectiu dins rang: base enemiga,
-;;   bolla enemiga o laboratori. La puntuació baixa
-;;   amb l'antiguitat de la informació perquè una observació recent és més valuosa
-;;   que una posició antiga de memòria.
+;;   laboratori o bolla enemiga. La puntuació baixa amb l'antiguitat de la informació
+;;   perquè una observació recent és més valuosa que una posició antiga de memòria.
 ;; - Per moure's, les bolles ataquen primer objectius tàctics coneguts. Si no hi ha
-;;   enemics ni laboratoris, les bolles exploradores cerquen fronteres: caselles de
-;;   terra buida conegudes amb veïns desconeguts. La millor frontera és la que obre
-;;   més cel·les desconegudes; en empat, es prefereix anar més lluny de la nostra
-;;   base i, finalment, triar l'opció més propera a la bolla actual.
+;;   enemics ni laboratoris, només miren les 8 caselles adjacents i trien la buida que
+;;   obre més veïns desconeguts. Si poden pintar, no calculen moviment aquell torn.
 
 ; **************************************************
 ; CONSTANTS
@@ -41,7 +36,7 @@
 (defconstant AGENT-JGR448-PAINT-RANGE   5)
 
 ; antiguitat màxima (en torns) abans de descartar una entrada de la memòria
-(defconstant AGENT-JGR448-AGE-MAX 100)
+(defconstant AGENT-JGR448-AGE-MAX 50)
 
 ; offsets (dx dy) dels 8 veïns adjacents (d² ≤ 2, excloent (0 0))
 ; emprat tant per moviment com per creació de bolla
@@ -67,28 +62,27 @@
 ; **************************************************
 
 ; operacions aritmètiques i lògiques bàsiques sobre llistes de N elements 
-(defun agent-jgr448-add   (a b) (mapcar '+ a b))
-(defun agent-jgr448-mul   (a b) (mapcar '* a b))
-(defun agent-jgr448-sub   (a b) (mapcar '- a b))
-(defun agent-jgr448-sum   (a)   (reduce '+ a :initial-value 0))
+(defun agent-jgr448-add   (a b)
+    "Suma element a element les llistes 'a' i 'b'."
+    (mapcar '+ a b))
+(defun agent-jgr448-mul   (a b)
+    "Multiplica element a element les llistes 'a' i 'b'."
+    (mapcar '* a b))
+(defun agent-jgr448-sub   (a b)
+    "Resta element a element la llista 'b' de la llista 'a'."
+    (mapcar '- a b))
+(defun agent-jgr448-sum   (a)
+    "Retorna la suma dels elements de la llista 'a'."
+    (reduce '+ a :initial-value 0))
 
-; converteix un booleà Lisp a enter
-(defun agent-jgr448-bool-int (x) (if x 1 0))
+(defun agent-jgr448-bool-int (x)
+    "Converteix el booleà Lisp 'x' en 0 o 1."
+    (if x 1 0))
 
-; distància euclidiana al quadrat entre dos coords (x y) — vàlida en espai desplaçat
 (defun agent-jgr448-dist (a b)
+    "Calcula la distància euclidiana al quadrat entre les coordenades desplaçades 'a' i 'b'."
     (let ((d (agent-jgr448-sub a b)))
          (agent-jgr448-sum (agent-jgr448-mul d d))))
-
-; índex de l'element màxim d'una llista (primer en cas d'empat)
-(defun agent-jgr448-argmax-rec (a i best-i best-a)
-    (cond ; ja hem recorregut tota la llista: retornam el millor índex trobat
-          ((null a) best-i)
-          ; l'element actual supera el millor valor: actualitzam índex i valor
-          ((> (car a) best-a) (agent-jgr448-argmax-rec (cdr a) (1+ i) i (car a)))
-          ; l'element actual no millora el resultat: continuam amb el millor existent
-          (t (agent-jgr448-argmax-rec (cdr a) (1+ i) best-i best-a))))
-(defun agent-jgr448-argmax (a) (agent-jgr448-argmax-rec (cdr a) 1 0 (car a)))
 
 ; **************************************************
 ; INFORMACIÓ DE L'AGENT
@@ -97,15 +91,33 @@
 ; format de info:
 ;   (ronda equip pintura id-unitat tipus-unitat coordenada
 ;    colors-pintat color-propi tr-pintar tr-moure visió memòria-compartida)
-(defun agent-jgr448-info-turn      (info) (nth 0  info))
-(defun agent-jgr448-info-team      (info) (nth 1  info))
-(defun agent-jgr448-info-paint     (info) (nth 2  info))
-(defun agent-jgr448-info-unit      (info) (nth 4  info))
-(defun agent-jgr448-info-coord     (info) (nth 5  info))
-(defun agent-jgr448-info-tr-paint  (info) (nth 8  info))
-(defun agent-jgr448-info-tr-move   (info) (nth 9  info))
-(defun agent-jgr448-info-vision    (info) (nth 10 info))
-(defun agent-jgr448-info-memory    (info) (nth 11 info))
+(defun agent-jgr448-info-turn      (info)
+    "Retorna el torn de la llista d'informació 'info'."
+    (nth 0  info))
+(defun agent-jgr448-info-team      (info)
+    "Retorna l'equip de la llista d'informació 'info'."
+    (nth 1  info))
+(defun agent-jgr448-info-paint     (info)
+    "Retorna la pintura disponible de la llista d'informació 'info'."
+    (nth 2  info))
+(defun agent-jgr448-info-unit      (info)
+    "Retorna el tipus d'unitat de la llista d'informació 'info'."
+    (nth 4  info))
+(defun agent-jgr448-info-coord     (info)
+    "Retorna la coordenada visible de la llista d'informació 'info'."
+    (nth 5  info))
+(defun agent-jgr448-info-tr-paint  (info)
+    "Retorna el cooldown de pintar de la llista d'informació 'info'."
+    (nth 8  info))
+(defun agent-jgr448-info-tr-move   (info)
+    "Retorna el cooldown de moviment de la llista d'informació 'info'."
+    (nth 9  info))
+(defun agent-jgr448-info-vision    (info)
+    "Retorna la visió actual de la llista d'informació 'info'."
+    (nth 10 info))
+(defun agent-jgr448-info-memory    (info)
+    "Retorna la memòria compartida de la llista d'informació 'info'."
+    (nth 11 info))
 
 ; **************************************************
 ; VISIÓ
@@ -117,19 +129,35 @@
 ;          lab: (coord TERRA color LAB equip)
 ;         base: (coord TERRA color BASE equip colors-pintat)
 ;        bolla: (coord TERRA color BOLLA equip colors-pintat color-propi tr-pintar tr-moure)
-(defun agent-jgr448-cell-coord    (cell) (nth 0 cell))
-(defun agent-jgr448-cell-type     (cell) (nth 1 cell))
-(defun agent-jgr448-cell-color    (cell) (nth 2 cell))
-(defun agent-jgr448-cell-element  (cell) (nth 3 cell))
-(defun agent-jgr448-cell-team     (cell) (nth 4 cell))
-(defun agent-jgr448-cell-painted  (cell) (nth 5 cell))
+(defun agent-jgr448-cell-coord    (cell)
+    "Retorna la coordenada de la cel·la visible 'cell'."
+    (nth 0 cell))
+(defun agent-jgr448-cell-type     (cell)
+    "Retorna el tipus de terreny de la cel·la visible 'cell'."
+    (nth 1 cell))
+(defun agent-jgr448-cell-element  (cell)
+    "Retorna l'element contingut a la cel·la visible 'cell'."
+    (nth 3 cell))
+(defun agent-jgr448-cell-team     (cell)
+    "Retorna l'equip de l'element de la cel·la visible 'cell'."
+    (nth 4 cell))
 
 ; predicats sobre cel·les del mapa
-(defun agent-jgr448-is-land  (cell) (eq (agent-jgr448-cell-type cell) AGENT-jgr448-LAND))
-(defun agent-jgr448-is-lab   (cell) (eq (agent-jgr448-cell-element cell) AGENT-jgr448-LAB))
-(defun agent-jgr448-is-base  (cell) (eq (agent-jgr448-cell-element cell) AGENT-jgr448-BASE))
-(defun agent-jgr448-is-ball  (cell) (eq (agent-jgr448-cell-element cell) AGENT-jgr448-BALL))
-(defun agent-jgr448-is-empty (cell) (and (agent-jgr448-is-land cell) (null (agent-jgr448-cell-element cell))))
+(defun agent-jgr448-is-land  (cell)
+    "Retorna cert si 'cell' és una cel·la de terra."
+    (eq (agent-jgr448-cell-type cell) AGENT-JGR448-LAND))
+(defun agent-jgr448-is-lab   (cell)
+    "Retorna cert si 'cell' conté un laboratori."
+    (eq (agent-jgr448-cell-element cell) AGENT-JGR448-LAB))
+(defun agent-jgr448-is-base  (cell)
+    "Retorna cert si 'cell' conté una base."
+    (eq (agent-jgr448-cell-element cell) AGENT-JGR448-BASE))
+(defun agent-jgr448-is-ball  (cell)
+    "Retorna cert si 'cell' conté una bolla."
+    (eq (agent-jgr448-cell-element cell) AGENT-JGR448-BALL))
+(defun agent-jgr448-is-empty (cell)
+    "Retorna cert si 'cell' és terra i no conté cap element."
+    (and (agent-jgr448-is-land cell) (null (agent-jgr448-cell-element cell))))
 
 ; **************************************************
 ; MEMÒRIA / VISIÓ COMPARTIDA
@@ -138,25 +166,33 @@
 ; entrada de la memòria: (turn cell)
 ;   turn:  torn en què es va observar la cel·la per darrera vegada
 ;   cell:  cel·la (mateix format que info-vision)
-(defun agent-jgr448-entry-make  (turn cell) (list turn cell))
-(defun agent-jgr448-entry-turn  (e) (car  e))
-(defun agent-jgr448-entry-cell  (e) (cadr e))
-(defun agent-jgr448-entry-coord (e) (agent-jgr448-cell-coord (agent-jgr448-entry-cell e)))
+(defun agent-jgr448-entry-make  (turn cell)
+    "Crea una entrada de memòria amb el torn 'turn' i la cel·la visible 'cell'."
+    (list turn cell))
+(defun agent-jgr448-entry-turn  (e)
+    "Retorna el torn de l'entrada de memòria 'e'."
+    (car  e))
+(defun agent-jgr448-entry-cell  (e)
+    "Retorna la cel·la visible de l'entrada de memòria 'e'."
+    (cadr e))
+(defun agent-jgr448-entry-coord (e)
+    "Retorna la coordenada de la cel·la de l'entrada de memòria 'e'."
+    (agent-jgr448-cell-coord (agent-jgr448-entry-cell e)))
 
-; cerca dins entries l'entrada amb la coord donada (o nil si no hi és)
 (defun agent-jgr448-entry-at (entries coord)
+    "Cerca dins 'entries' l'entrada amb coordenada 'coord', o nil si no hi és."
     (cond ((null entries) nil)
           ((equal (agent-jgr448-entry-coord (car entries)) coord) (car entries))
           (t (agent-jgr448-entry-at (cdr entries) coord))))
 
-; cerca dins una llista de cel·les la que té la coord donada (o nil si no hi és)
 (defun agent-jgr448-cell-at (cells coord)
+    "Cerca dins 'cells' la cel·la amb coordenada 'coord', o nil si no hi és."
     (cond ((null cells) nil)
           ((equal (agent-jgr448-cell-coord (car cells)) coord) (car cells))
           (t (agent-jgr448-cell-at (cdr cells) coord))))
 
-; crea cel·les sintètiques (coord nil) per coords visibles que no existeixen al mapa
 (defun agent-jgr448-edge-cells (src vision offsets)
+    "Crea cel·les sintètiques (coord nil) per offsets visibles des de 'src' que no apareixen a 'vision'."
     (if (null offsets)
         nil
         (let ((coord (agent-jgr448-add src (car offsets))))
@@ -165,54 +201,33 @@
                  (cons (list coord nil)
                        (agent-jgr448-edge-cells src vision (cdr offsets)))))))
 
-; visió actual ampliada amb vores del mapa inferides
 (defun agent-jgr448-known-cells (info)
+    "Retorna la visió actual d''info' ampliada amb vores del mapa inferides."
     (let ((vision (agent-jgr448-info-vision info)))
          (append vision
                  (agent-jgr448-edge-cells
                      (agent-jgr448-info-coord info)
                      vision
-                     AGENT-jgr448-BALL-VISION-OFFSETS))))
+                     AGENT-JGR448-BALL-VISION-OFFSETS))))
 
-; combina la visió actual (etiquetada amb turn) amb la memòria
-; les entrades més recents sobreescriuen les antigues
 (defun agent-jgr448-merge-vision (vision turn mem)
+    "Combina 'vision', etiquetada amb 'turn', amb 'mem'; les entrades més recents sobreescriuen les antigues."
     (let ((new (mapcar (lambda (c) (agent-jgr448-entry-make turn c)) vision)))
         (append new (remove-if (lambda (e) (agent-jgr448-entry-at new (agent-jgr448-entry-coord e))) mem))))
 
-; descarta només bolles antigues: bases, labs, terreny i vores no es mouen
 (defun agent-jgr448-entries-drop-old (entries turn)
+    "Descarta de 'entries' les bolles més antigues que AGENT-JGR448-AGE-MAX respecte 'turn'."
     (remove-if (lambda (e)
                    (and (agent-jgr448-is-ball (agent-jgr448-entry-cell e))
-                        (> (- turn (agent-jgr448-entry-turn e)) AGENT-jgr448-AGE-MAX)))
+                        (> (- turn (agent-jgr448-entry-turn e)) AGENT-JGR448-AGE-MAX)))
                entries))
-
-; entries que satisfan el predicat fun aplicat a la cel·la interna
-(defun agent-jgr448-entries-where (entries fun)
-    (remove-if (lambda (e) (not (funcall fun (agent-jgr448-entry-cell e)))) entries))
-
-; entrades que tenen una bolla enemiga
-(defun agent-jgr448-enemy-balls (entries team)
-    (agent-jgr448-entries-where entries
-        (lambda (c) (and (agent-jgr448-is-ball c) (not (eq (agent-jgr448-cell-team c) team))))))
-
-; entrades que tenen una base enemiga
-(defun agent-jgr448-enemy-bases (entries team)
-    (agent-jgr448-entries-where entries
-        (lambda (c) (and (agent-jgr448-is-base c) (not (eq (agent-jgr448-cell-team c) team))))))
-
-; entrada que conté la nostra base
-(defun agent-jgr448-friendly-base (entries team)
-    (car (agent-jgr448-entries-where entries
-        (lambda (c) (and (agent-jgr448-is-base c) (eq (agent-jgr448-cell-team c) team))))))
 
 ; **************************************************
 ; ESTRATÈGIA DE LA BASE
 ; **************************************************
 
-; cerca el primer veïnat que sigui terra buida dins de entries
-; recorre la llista d'offsets recursivament i retorna la primera coord vàlida (o nil)
 (defun agent-jgr448-find-empty-neighbour (src entries offsets)
+    "Recorre 'offsets' i retorna la primera coordenada veïna de 'src' que és terra buida dins 'entries'."
     (if (null offsets)
         nil
         (let* ((dst (agent-jgr448-add src (car offsets)))
@@ -224,54 +239,27 @@
                     ; veí no serveix: provam el següent offset
                     (agent-jgr448-find-empty-neighbour src entries (cdr offsets))))))
 
-; pes d'una cel·la enemiga segons el seu tipus
-(defun agent-jgr448-color-weight (cell)
-    (cond ((agent-jgr448-is-base cell) 10)
-          ((agent-jgr448-is-ball cell) 1)
-          (t 0)))
-
-; vector (r g b) on cada element val 1 si la unitat NO està pintada amb aquell color
-(defun agent-jgr448-missing-counts (cell)
-    (let ((w (agent-jgr448-color-weight cell))
-          (painted (agent-jgr448-cell-painted cell)))
-         (mapcar (lambda (c) (if (member c painted) 0 w)) AGENT-jgr448-RGB)))
-
-; suma vectorial (r g b): per cada enemic visible, agrega missing-counts ponderat
-(defun agent-jgr448-missing-total (entries team)
-    (reduce #'agent-jgr448-add
-            (mapcar (lambda (e) (agent-jgr448-missing-counts (agent-jgr448-entry-cell e)))
-                    (append (agent-jgr448-enemy-bases entries team)
-                            (agent-jgr448-enemy-balls entries team)))
-            :initial-value '(0 0 0)))
-
-; tria un color per crear la bolla:
-;   - si veiem enemics, agreguem els colors que els falten ponderats per tipus i triem el màxim
-;   - si no, rotam entre r/g/b segons (mod ronda 3) per variar
-(defun agent-jgr448-base-pick-color (info entries)
-    (let* ((team (agent-jgr448-info-team info))
-           (totals (agent-jgr448-missing-total entries team))
-           (idx (agent-jgr448-argmax totals)))
-        (if (> (nth idx totals) 0)
-            ; hi ha enemics coneguts: triem el color que més falta als objectius
-            (nth idx AGENT-jgr448-RGB)
-            ; no tenim informació ofensiva: alternam colors per no produir sempre igual
-            (nth (mod (agent-jgr448-info-turn info) (length AGENT-jgr448-RGB)) AGENT-jgr448-RGB))))
+; tria un color per crear la bolla rotant entre r/g/b segons el torn
+(defun agent-jgr448-base-pick-color (info)
+    "Tria el color d'una bolla nova rotant uniformement segons el torn d''info'."
+    (nth (mod (agent-jgr448-info-turn info) (length AGENT-JGR448-RGB)) AGENT-JGR448-RGB))
 
 ; estratègia de la base:
 ;   - si tenim menys pintura que el cost d'una bolla, no fem res
-;   - si tenim un veí buit, hi creem una bolla amb un color útil
+;   - si tenim un veí buit, hi creem una bolla amb el color que toca per rotació
 ;   - altrament, no fem res
 (defun agent-jgr448-base (info entries)
+    "Decideix les accions de base per la unitat descrita per 'info' usant les entrades 'entries'."
     (cond ; sense pintura suficient no intentam crear cap bolla
-          ((< (agent-jgr448-info-paint info) AGENT-jgr448-BALL-COST) nil)
+          ((< (agent-jgr448-info-paint info) AGENT-JGR448-BALL-COST) nil)
           ; tenim pintura: cercam una casella adjacent buida on la creació sigui vàlida
           (t (let ((dst (agent-jgr448-find-empty-neighbour
                              (agent-jgr448-info-coord info)
                              entries
-                             AGENT-jgr448-NEIGH-OFFSETS)))
+                             AGENT-JGR448-NEIGH-OFFSETS)))
                 (if dst
-                    ; hi ha lloc lliure: cream una bolla amb el color més útil
-                    (list (list 'CREA-BOLLA (list (agent-jgr448-base-pick-color info entries) dst)))
+                    ; hi ha lloc lliure: cream una bolla amb el color de la rotació
+                    (list (list 'CREA-BOLLA (list (agent-jgr448-base-pick-color info) dst)))
                     ; l'anell de creació està ple
                     nil)))))
 
@@ -280,25 +268,26 @@
 ; **************************************************
 
 ; puntuació base d'una cel·la com a objectiu (sense tenir en compte l'antiguitat):
-;   base enemiga: 1000  bolla enemiga: 100  lab no nostre: 50
+;   base enemiga: 800  lab no nostre: 300  bolla enemiga: 120
 ;   altre: 0
 (defun agent-jgr448-score-cell (cell team)
+    "Retorna la puntuació tàctica base de 'cell' com a objectiu per l'equip 'team'."
     (cond ((eq (agent-jgr448-cell-team cell) team) 0)
-          ((agent-jgr448-is-base cell) 1000)
-          ((agent-jgr448-is-ball cell) 100)
-          ((agent-jgr448-is-lab  cell) 50)
+          ((agent-jgr448-is-base cell) 800)
+          ((agent-jgr448-is-lab  cell) 300)
+          ((agent-jgr448-is-ball cell) 120)
           (t 0)))
 
 ; puntuació d'una entrada: la base menys l'antiguitat (cap a 0 mai)
 ; així informació recent és preferida sense descartar del tot la antiga
 (defun agent-jgr448-score-entry (entry team turn)
+    "Retorna la puntuació de l'entrada 'entry' per 'team' al torn 'turn', penalitzada per antiguitat."
     (let ((age (- turn (agent-jgr448-entry-turn entry)))
           (raw (agent-jgr448-score-cell (agent-jgr448-entry-cell entry) team)))
          (max 0 (- raw age))))
 
-; entre una llista d'entries, retorna la millor entry
-; criteris: més puntuació primer, després més propera a src; nil si cap puntua > 0
 (defun agent-jgr448-best-entry (entries src team turn)
+    "Retorna la millor entrada de 'entries' per 'team' des de 'src': més puntuació i després més proximitat."
     (car (reduce (lambda (best e)
                     (let* ((s (agent-jgr448-score-entry e team turn))
                            (d (agent-jgr448-dist (agent-jgr448-entry-coord e) src)))
@@ -314,72 +303,26 @@
                               (t best))))
                 entries :initial-value nil)))
 
-; millor objectiu a pintar: entry dins del rang de pintar amb puntuació > 0
 (defun agent-jgr448-best-paint-target (info entries)
+    "Retorna el millor objectiu dins rang de pintar per la unitat descrita per 'info'."
     (let* ((src (agent-jgr448-info-coord info))
            (team (agent-jgr448-info-team info))
            (turn (agent-jgr448-info-turn info))
            (in-range (remove-if (lambda (e)
                                      (> (agent-jgr448-dist (agent-jgr448-entry-coord e) src)
-                                        AGENT-jgr448-PAINT-RANGE))
+                                        AGENT-JGR448-PAINT-RANGE))
                                  entries)))
         (agent-jgr448-best-entry in-range src team turn)))
 
-; compta quants veïns d'una coord encara no són a la memòria/visió compartida
 (defun agent-jgr448-unknown-neighbours (coord entries)
+    "Compta quants veïns de 'coord' encara no apareixen dins la memòria compartida 'entries'."
     (agent-jgr448-sum (mapcar
         (lambda (off) (agent-jgr448-bool-int
             (null (agent-jgr448-entry-at entries (agent-jgr448-add coord off)))))
-        AGENT-jgr448-NEIGH-OFFSETS)))
+        AGENT-JGR448-NEIGH-OFFSETS)))
 
-; construeix el candidat de frontera (entry unknown base-dist ball-dist) per una entry
-(defun agent-jgr448-frontier-candidate (entry entries origin src)
-    (let* ((coord (agent-jgr448-entry-coord entry))
-           ; només les caselles buides poden ser fronteres explorables
-           (unknown (if (agent-jgr448-is-empty (agent-jgr448-entry-cell entry))
-                        (agent-jgr448-unknown-neighbours coord entries)
-                        0))
-           (base-dist (agent-jgr448-dist coord origin))
-           (ball-dist (agent-jgr448-dist coord src)))
-          (if (zerop unknown)
-              ; sense veïns desconeguts, aquesta casella no obre mapa nou
-              nil
-              ; candidat vàlid per comparar dins best-frontier-target
-              (list entry unknown base-dist ball-dist))))
-
-; compara dos candidats de frontera i retorna el millor segons la prioritat definida
-(defun agent-jgr448-better-frontier (best candidate)
-    (cond ; si entry no era frontera, no pot millorar el millor candidat
-          ((null candidate) best)
-          ; primer candidat de frontera vàlid
-          ((null best) candidate)
-          ; prioritat principal: màxim nombre de cel·les per descobrir
-          ((> (cadr candidate) (cadr best)) candidate)
-          ; en empat de cel·les per descobrir, preferim avançar cap enfora de la base
-          ((and (= (cadr candidate) (cadr best))
-                (> (caddr candidate) (caddr best))) candidate)
-          ; si també empata la distància a la base, preferim desplaçaments propers a la cel·la actual
-          ((and (= (cadr candidate) (cadr best))
-                (= (caddr candidate) (caddr best))
-                (< (nth 3 candidate) (nth 3 best))) candidate)
-          ; mantenim el millor candidat anterior
-          (t best)))
-
-; millor entry d'exploració quan no hi ha enemics/labs a la memòria.
-; només considera terra buida amb almenys un veí desconegut. internament, el valor best
-; té format (entry unknown base-dist ball-dist), on unknown és el nombre de veïns desconeguts.
-; criteri: maximitzar unknown, després maximitzar base-dist i finalment minimitzar ball-dist.
-(defun agent-jgr448-best-frontier-target (info entries)
-    (let* ((src (agent-jgr448-info-coord info))
-           (team (agent-jgr448-info-team info))
-           (own-base-entry (agent-jgr448-friendly-base entries team))
-           (origin (if own-base-entry (agent-jgr448-entry-coord own-base-entry) src)))
-          (car (reduce (lambda (best entry) (agent-jgr448-better-frontier best (agent-jgr448-frontier-candidate entry entries origin src)))
-                       entries
-                       :initial-value nil))))
-
-; millor objectiu tàctic conegut: enemic o laboratori no propi
 (defun agent-jgr448-best-tactical-target (info entries)
+    "Retorna el millor objectiu tàctic conegut dins 'entries' per la unitat descrita per 'info'."
     (agent-jgr448-best-entry entries
                              (agent-jgr448-info-coord info)
                              (agent-jgr448-info-team info)
@@ -389,6 +332,7 @@
 ; cada candidat ha de ser terra buida i present a entries (això garanteix que sigui dins del mapa)
 ; acumulador best té format (coord d²)
 (defun agent-jgr448-best-step-rec (src entries target offsets best)
+    "Avalua recursivament 'offsets' i retorna el millor pas des de 'src' cap a 'target'."
     (cond ; ja hem avaluat tots els veïns possibles: retornam el millor pas
           ((null offsets) best)
           ; avaluam el veí indicat pel primer offset pendent
@@ -404,58 +348,74 @@
                         ; veí invalid o desconegut: l'ignoram
                         (agent-jgr448-best-step-rec src entries target (cdr offsets) best))))))
 
-; versió simple d'un pas greedy cap a qualsevol objectiu de moviment
 (defun agent-jgr448-step-towards (src entries target)
-    (let ((best (agent-jgr448-best-step-rec src entries target AGENT-jgr448-NEIGH-OFFSETS nil)))
+    "Retorna un pas greedy des de 'src' cap a 'target' usant les cel·les conegudes 'entries'."
+    (let ((best (agent-jgr448-best-step-rec src entries target AGENT-JGR448-NEIGH-OFFSETS nil)))
          (if best (car best) nil)))
 
-; pas greedy que només accepta acostar-se realment al target
 (defun agent-jgr448-step-closer (src entries target)
+    "Retorna un pas greedy des de 'src' només si redueix la distància a 'target'."
     (let ((step (agent-jgr448-step-towards src entries target)))
          (if (and step (< (agent-jgr448-dist step target) (agent-jgr448-dist src target)))
              step
              nil)))
 
-; moviment d'exploració cap a la millor frontera coneguda
-(defun agent-jgr448-frontier-step (info entries)
-    (let* ((src (agent-jgr448-info-coord info))
-           (target (agent-jgr448-best-frontier-target info entries))
-           (target-coord (if target (agent-jgr448-entry-coord target) nil)))
-          (if target-coord
-              (agent-jgr448-step-towards src entries target-coord)
-              nil)))
+; exploració local lleugera: només mira les 8 caselles adjacents i tria la que obre més desconegut.
+; best té format (coord unknown); en empat es manté el primer veí segons AGENT-JGR448-NEIGH-OFFSETS.
+(defun agent-jgr448-local-explore-rec (src entries offsets best)
+    "Avalua els veïns de 'src' dins 'offsets' i retorna el pas buit que obre més veïns desconeguts."
+    (if (null offsets)
+        best
+        (let* ((dst (agent-jgr448-add src (car offsets)))
+               (entry (agent-jgr448-entry-at entries dst))
+               (cell (agent-jgr448-entry-cell entry))
+               (unknown (if (and cell (agent-jgr448-is-empty cell))
+                            (agent-jgr448-unknown-neighbours dst entries)
+                            0))
+               (best-new (if (and (> unknown 0)
+                                  (or (null best) (> unknown (cadr best))))
+                             (list dst unknown)
+                             best)))
+              (agent-jgr448-local-explore-rec src entries (cdr offsets) best-new))))
 
-; moviment greedy: avança cap al millor objectiu conegut, tàctic o exploratori
+(defun agent-jgr448-local-explore-step (info entries)
+    "Retorna un pas d'exploració local per la unitat descrita per 'info', o nil si no n'hi ha."
+    (let ((best (agent-jgr448-local-explore-rec
+                    (agent-jgr448-info-coord info)
+                    entries
+                    AGENT-JGR448-NEIGH-OFFSETS
+                    nil)))
+         (if best (car best) nil)))
+
 (defun agent-jgr448-best-move-step (info entries)
+    "Retorna el millor pas de moviment tàctic o exploratori per la unitat descrita per 'info'."
     (let* ((src (agent-jgr448-info-coord info))
            (target (agent-jgr448-best-tactical-target info entries))
            (target-coord (if target (agent-jgr448-entry-coord target) nil)))
           (cond ((null target-coord)
-                 (agent-jgr448-frontier-step info entries))
+                 (agent-jgr448-local-explore-step info entries))
                 ; si ja podem pintar l'objectiu, no ens n'allunyam
-                ((<= (agent-jgr448-dist src target-coord) AGENT-jgr448-PAINT-RANGE)
+                ((<= (agent-jgr448-dist src target-coord) AGENT-JGR448-PAINT-RANGE)
                  nil)
-                ; si l'atac greedy queda bloquejat, deixam que l'exploració cerqui alternativa
+                ; si l'atac greedy queda bloquejat, feim una exploració local barata
                 (t (let ((step (agent-jgr448-step-closer src entries target-coord)))
-                       (if step step (agent-jgr448-frontier-step info entries)))))))
+                       (if step step (agent-jgr448-local-explore-step info entries)))))))
 
-; estratègia de la bolla:
-;   - intenta pintar el millor objectiu en rang (si tr-paint < 1)
-;   - intenta moure cap a l'objectiu de més puntuació (si tr-move < 1)
 (defun agent-jgr448-ball (info entries)
+    "Decideix accions de bolla per 'info': pinta si pot; només calcula moviment si no pinta."
     (let* ((tr-paint (agent-jgr448-info-tr-paint info))
            (tr-move  (agent-jgr448-info-tr-move  info))
            ; només cercam tret si el temps de recuperació permet pintar
            (paint-dst (and (< tr-paint 1) (agent-jgr448-best-paint-target info entries)))
-           ; només cercam moviment si el temps de recuperació permet moure
-           (move-step (and (< tr-move 1) (agent-jgr448-best-move-step info entries)))
            (paint-action (if paint-dst
                               (list (list 'PINTA (list (agent-jgr448-entry-coord paint-dst))))
-                              nil))
-           (move-action  (if move-step
-                              (list (list 'MOU (list move-step)))
                               nil)))
-        (append paint-action move-action)))
+        (if paint-action
+            paint-action
+            (let ((move-step (and (< tr-move 1) (agent-jgr448-best-move-step info entries))))
+                 (if move-step
+                     (list (list 'MOU (list move-step)))
+                     nil)))))
 
 ; **************************************************
 ; ENTRADA DE L'AGENT
@@ -467,6 +427,7 @@
 ;      tenguin la mateixa visió en el pròxim torn
 ;   3. crida l'estratègia corresponent passant les entries fusionades
 (defun agent-jgr448 (info)
+    "Retorna les accions de l'agent JGR448 per la unitat descrita per 'info'."
     (let* ((unit (agent-jgr448-info-unit info))
            (turn (agent-jgr448-info-turn info))
            ; fusionam visió i memòria abans de decidir, així cada unitat usa el millor mapa conegut
