@@ -1,6 +1,6 @@
 ;; Pràctica final de Llenguatges de Programació.
 ;; LISP - Paintball.
-;; Estudiants: ABC, XYZ.
+;; Estudiants: SNG656, JGR448
 ;; Professor: XXX.
 ;; Lliurament: primera convocatòria.
 ;; Fitxer de l'agent intel·ligent SNG656.
@@ -11,17 +11,23 @@
 ;;   sobreescriuen les antigues. Les cel·les que falten dins el rang de visió es
 ;;   guarden com a (coord nil) per no explorar més enllà de les vores. Les entrades
 ;;   antigues només es descarten si contenien bolles, perquè són l'únic element que es
-;;   mou.
+;;   mou. No s'aplica cap penalització d'antiguitat a la puntuació dels objectius: si
+;;   una entrada és prou nova per quedar a memòria, es valora igual que la resta.
 ;; - La base crea bolles només si té pintura suficient i hi ha una casella adjacent
 ;;   buida, tal com exigeix la lògica del joc. El color de la nova bolla es tria segons
-;;   els colors que falten a les bolles pròpies conegudes.
+;;   els colors que falten a les bolles pròpies conegudes; si no en coneix cap, alterna
+;;   r/g/b segons el torn per mantenir varietat.
 ;; - Les bolles primer intenten pintar el millor objectiu dins rang: base enemiga,
-;;   bolla enemiga o laboratori.
+;;   bolla enemiga o laboratori. La prioritat és base > bolla > laboratori, amb empat
+;;   per proximitat. No es torna a pintar un objectiu que ja té el color propi de la
+;;   bolla, perquè no aportaria cap color nou.
 ;; - Per moure's, les bolles ataquen primer objectius tàctics coneguts. Si no hi ha
-;;   enemics ni laboratoris, les bolles exploradores cerquen fronteres: caselles de
+;;   enemics ni laboratoris, les bolles cerquen fronteres: caselles de
 ;;   terra buida conegudes amb veïns desconeguts. La millor frontera és la que obre
 ;;   més cel·les desconegudes; en empat, es prefereix anar més lluny de la nostra
-;;   base i, finalment, triar l'opció més propera a la bolla actual.
+;;   base i, finalment, triar l'opció més propera a la bolla actual. Si un objectiu
+;;   tàctic existeix però no hi ha cap pas adjacent que s'hi acosti realment, la bolla
+;;   torna a usar moviment de frontera per no quedar bloquejada.
 
 ; **************************************************
 ; CONSTANTS
@@ -85,7 +91,6 @@
     (let ((d (agent-sng656-sub a b)))
          (agent-sng656-sum (agent-sng656-mul d d))))
 
-; índex de l'element màxim d'una llista (primer en cas d'empat)
 (defun agent-sng656-argmax-rec (a i best-i best-a)
     "Continua la cerca recursiva del màxim dins 'a', mantenint índex i millor valor acumulats."
     (cond ; ja hem recorregut tota la llista: retornam el millor índex trobat
@@ -273,8 +278,6 @@
 ; ESTRATÈGIA DE LA BASE
 ; **************************************************
 
-; cerca el primer veïnat que sigui terra buida dins de entries
-; recorre la llista d'offsets recursivament i retorna la primera coord vàlida (o nil)
 (defun agent-sng656-find-empty-neighbour (src entries offsets)
     "Cerca el primer veí de 'src' indicat per 'offsets' que sigui terra buida dins 'entries'."
     (if (null offsets)
@@ -316,7 +319,7 @@
 ;   - si tenim un veí buit, hi creem una bolla amb un color útil
 ;   - altrament, no fem res
 (defun agent-sng656-base (info entries)
-    "Retorna les accions de base per la unitat descrita per 'info' usant la memòria 'entries'."
+    "Retorna accions de base: crea una bolla de color útil si hi ha pintura suficient i un veí buit."
     (cond ; sense pintura suficient no intentam crear cap bolla
           ((< (agent-sng656-info-paint info) AGENT-SNG656-BALL-COST) nil)
           ; tenim pintura: cercam una casella adjacent buida on la creació sigui vàlida
@@ -334,11 +337,11 @@
 ; ESTRATÈGIA DE LA BOLLA
 ; **************************************************
 
-; puntuació base d'una cel·la com a objectiu (sense tenir en compte l'antiguitat):
+; puntuació base d'una cel·la com a objectiu:
 ;   base enemiga: 1000  bolla enemiga: 100  lab no nostre: 50
 ;   altre: 0
 (defun agent-sng656-score-cell (cell team)
-    "Retorna la puntuació tàctica de 'cell' com a objectiu per a l'equip 'team'."
+    "Retorna la puntuació tàctica de 'cell' per a 'team': base 1000, bolla 100, lab 50, altre 0."
     (cond ((eq (agent-sng656-cell-team cell) team) 0)
           ((agent-sng656-is-base cell) 1000)
           ((agent-sng656-is-ball cell) 100)
@@ -347,8 +350,9 @@
 
 ; entre una llista d'entries, retorna la millor entry
 ; criteris: més puntuació primer, després més propera a src; nil si cap puntua > 0
+; també ignora els objectius que ja estan pintats del color propi de la bolla
 (defun agent-sng656-best-entry (entries src team own-color)
-    "Retorna la millor entrada objectiu de 'entries' per una bolla de 'team' i 'own-color' situada a 'src'."
+    "Retorna la millor entrada de 'entries': més puntuació, després més propera a 'src', i no pintada de 'own-color'."
     (car (reduce (lambda (best e)
                     (let* ((cell (agent-sng656-entry-cell e))
                            (s (agent-sng656-score-cell cell team))
@@ -422,7 +426,7 @@
 ; té format (entry unknown base-dist ball-dist), on unknown és el nombre de veïns desconeguts.
 ; criteri: maximitzar unknown, després maximitzar base-dist i finalment minimitzar ball-dist.
 (defun agent-sng656-best-frontier-target (info entries)
-    "Retorna la millor entrada de frontera per explorar des de la unitat descrita per 'info'."
+    "Retorna la millor frontera: terra buida amb veïns desconeguts, màxim unknown, més lluny de base i més prop de la bolla."
     (let* ((src (agent-sng656-info-coord info))
            (team (agent-sng656-info-team info))
            (own-base-entry (agent-sng656-friendly-base entries team))
@@ -442,7 +446,7 @@
 ; cada candidat ha de ser terra buida i present a entries (això garanteix que sigui dins del mapa)
 ; acumulador best té format (coord d²)
 (defun agent-sng656-best-step-rec (src entries target offsets best)
-    "Cerca recursivament el millor pas adjacent des de 'src' cap a 'target' provant 'offsets'."
+    "Cerca recursivament el millor pas adjacent de terra buida des de 'src' cap a 'target' provant 'offsets'."
     (cond ; ja hem avaluat tots els veïns possibles: retornam el millor pas
           ((null offsets) best)
           ; avaluam el veí indicat pel primer offset pendent
@@ -463,11 +467,11 @@
     (let ((best (agent-sng656-best-step-rec src entries target AGENT-SNG656-NEIGH-OFFSETS nil)))
          (if best (car best) nil)))
 
-(defun agent-sng656-step-closer (src entries target)
+(defun agent-sng656-step-target (src entries target)
     "Retorna un pas cap a 'target' només si redueix realment la distància des de 'src'."
-    (let ((step (agent-sng656-step-towards src entries target)))
-         (if (and step (< (agent-sng656-dist step target) (agent-sng656-dist src target)))
-             step
+    (let ((stp (agent-sng656-step-towards src entries target)))
+         (if (and stp (< (agent-sng656-dist stp target) (agent-sng656-dist src target)))
+             stp
              nil)))
 
 (defun agent-sng656-frontier-step (info entries)
@@ -488,14 +492,14 @@
                 ; si ja podem pintar l'objectiu, no ens n'allunyam
                 ((<= (agent-sng656-dist src target-coord) AGENT-SNG656-PAINT-RANGE) nil)
                 ; si no estam en rang de pintar, passam a explorar
-                (t (let ((stp (agent-sng656-step-closer src entries target-coord)))
+                (t (let ((stp (agent-sng656-step-target src entries target-coord)))
                        (if stp stp (agent-sng656-frontier-step info entries)))))))
 
 ; estratègia de la bolla:
 ;   - intenta pintar el millor objectiu en rang (si tr-paint < 1)
 ;   - intenta moure cap a l'objectiu de més puntuació (si tr-move < 1)
 (defun agent-sng656-ball (info entries)
-    "Retorna les accions de bolla per la unitat descrita per 'info' usant la memòria 'entries'."
+    "Retorna les accions de bolla: pinta el millor objectiu disponible i mou cap al millor objectiu si pot."
     (let* ((tr-paint (agent-sng656-info-tr-paint info))
            (tr-move  (agent-sng656-info-tr-move  info))
            (own-color (agent-sng656-info-own-color info))
@@ -521,7 +525,7 @@
 ;      tenguin la mateixa visió en el pròxim torn
 ;   3. crida l'estratègia corresponent passant les entries fusionades
 (defun agent-sng656 (info)
-    "Punt d'entrada de l'agent SNG656; rep 'info' d'una unitat i retorna la llista d'accions."
+    "Punt d'entrada de l'agent SNG656; fusiona visió i memòria, escriu la memòria nova i retorna accions per 'info'."
     (let* ((unit (agent-sng656-info-unit info))
            (turn (agent-sng656-info-turn info))
            ; fusionam visió i memòria abans de decidir, així cada unitat usa el millor mapa conegut

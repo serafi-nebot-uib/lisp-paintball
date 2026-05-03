@@ -1,6 +1,6 @@
 ;; Pràctica final de Llenguatges de Programació.
 ;; LISP - Paintball.
-;; Estudiants: ABC, XYZ.
+;; Estudiants: SNG656, JGR448
 ;; Professor: XXX.
 ;; Lliurament: primera convocatòria.
 ;; Fitxer del controlador principal.
