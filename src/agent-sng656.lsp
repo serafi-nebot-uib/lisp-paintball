@@ -67,28 +67,39 @@
 ; **************************************************
 
 ; operacions aritmètiques i lògiques bàsiques sobre llistes de N elements 
-(defun agent-sng656-add   (a b) (mapcar '+ a b))
-(defun agent-sng656-mul   (a b) (mapcar '* a b))
-(defun agent-sng656-sub   (a b) (mapcar '- a b))
-(defun agent-sng656-sum   (a)   (reduce '+ a :initial-value 0))
+(defun agent-sng656-add   (a b)
+    "Suma element a element les llistes 'a' i 'b'."
+    (mapcar '+ a b))
+(defun agent-sng656-mul   (a b)
+    "Multiplica element a element les llistes 'a' i 'b'."
+    (mapcar '* a b))
+(defun agent-sng656-sub   (a b)
+    "Resta element a element la llista 'b' de la llista 'a'."
+    (mapcar '- a b))
+(defun agent-sng656-sum   (a)
+    "Retorna la suma dels elements de la llista 'a'."
+    (reduce '+ a :initial-value 0))
 
-; converteix un booleà Lisp a enter
-(defun agent-sng656-bool-int (x) (if x 1 0))
+(defun agent-sng656-bool-int (x)
+    "Converteix el booleà Lisp 'x' en 0 o 1."
+    (if x 1 0))
 
-; distància euclidiana al quadrat entre dos coords (x y) — vàlida en espai desplaçat
 (defun agent-sng656-dist (a b)
+    "Calcula la distància euclidiana al quadrat entre les coordenades desplaçades 'a' i 'b'."
     (let ((d (agent-sng656-sub a b)))
          (agent-sng656-sum (agent-sng656-mul d d))))
 
-; índex de l'element màxim d'una llista (primer en cas d'empat)
 (defun agent-sng656-argmax-rec (a i best-i best-a)
+    "Recorre 'a' des de l'índex 'i' i retorna l'índex del màxim, mantenint 'best-i' i 'best-a'."
     (cond ; ja hem recorregut tota la llista: retornam el millor índex trobat
           ((null a) best-i)
           ; l'element actual supera el millor valor: actualitzam índex i valor
           ((> (car a) best-a) (agent-sng656-argmax-rec (cdr a) (1+ i) i (car a)))
           ; l'element actual no millora el resultat: continuam amb el millor existent
           (t (agent-sng656-argmax-rec (cdr a) (1+ i) best-i best-a))))
-(defun agent-sng656-argmax (a) (agent-sng656-argmax-rec (cdr a) 1 0 (car a)))
+(defun agent-sng656-argmax (a)
+    "Retorna l'índex del valor màxim de la llista 'a', triant el primer en cas d'empat."
+    (agent-sng656-argmax-rec (cdr a) 1 0 (car a)))
 
 ; **************************************************
 ; INFORMACIÓ DE L'AGENT
@@ -97,15 +108,33 @@
 ; format de info:
 ;   (ronda equip pintura id-unitat tipus-unitat coordenada
 ;    colors-pintat color-propi tr-pintar tr-moure visió memòria-compartida)
-(defun agent-sng656-info-turn      (info) (nth 0  info))
-(defun agent-sng656-info-team      (info) (nth 1  info))
-(defun agent-sng656-info-paint     (info) (nth 2  info))
-(defun agent-sng656-info-unit      (info) (nth 4  info))
-(defun agent-sng656-info-coord     (info) (nth 5  info))
-(defun agent-sng656-info-tr-paint  (info) (nth 8  info))
-(defun agent-sng656-info-tr-move   (info) (nth 9  info))
-(defun agent-sng656-info-vision    (info) (nth 10 info))
-(defun agent-sng656-info-memory    (info) (nth 11 info))
+(defun agent-sng656-info-turn      (info)
+    "Retorna el torn de la llista d'informació 'info'."
+    (nth 0  info))
+(defun agent-sng656-info-team      (info)
+    "Retorna l'equip de la llista d'informació 'info'."
+    (nth 1  info))
+(defun agent-sng656-info-paint     (info)
+    "Retorna la pintura disponible de la llista d'informació 'info'."
+    (nth 2  info))
+(defun agent-sng656-info-unit      (info)
+    "Retorna el tipus d'unitat de la llista d'informació 'info'."
+    (nth 4  info))
+(defun agent-sng656-info-coord     (info)
+    "Retorna la coordenada visible de la llista d'informació 'info'."
+    (nth 5  info))
+(defun agent-sng656-info-tr-paint  (info)
+    "Retorna el cooldown de pintar de la llista d'informació 'info'."
+    (nth 8  info))
+(defun agent-sng656-info-tr-move   (info)
+    "Retorna el cooldown de moviment de la llista d'informació 'info'."
+    (nth 9  info))
+(defun agent-sng656-info-vision    (info)
+    "Retorna la visió actual de la llista d'informació 'info'."
+    (nth 10 info))
+(defun agent-sng656-info-memory    (info)
+    "Retorna la memòria compartida de la llista d'informació 'info'."
+    (nth 11 info))
 
 ; **************************************************
 ; VISIÓ
@@ -117,19 +146,41 @@
 ;          lab: (coord TERRA color LAB equip)
 ;         base: (coord TERRA color BASE equip colors-pintat)
 ;        bolla: (coord TERRA color BOLLA equip colors-pintat color-propi tr-pintar tr-moure)
-(defun agent-sng656-cell-coord    (cell) (nth 0 cell))
-(defun agent-sng656-cell-type     (cell) (nth 1 cell))
-(defun agent-sng656-cell-color    (cell) (nth 2 cell))
-(defun agent-sng656-cell-element  (cell) (nth 3 cell))
-(defun agent-sng656-cell-team     (cell) (nth 4 cell))
-(defun agent-sng656-cell-painted  (cell) (nth 5 cell))
+(defun agent-sng656-cell-coord    (cell)
+    "Retorna la coordenada de la cel·la visible 'cell'."
+    (nth 0 cell))
+(defun agent-sng656-cell-type     (cell)
+    "Retorna el tipus de terreny de la cel·la visible 'cell'."
+    (nth 1 cell))
+(defun agent-sng656-cell-color    (cell)
+    "Retorna el color de terreny de la cel·la visible 'cell'."
+    (nth 2 cell))
+(defun agent-sng656-cell-element  (cell)
+    "Retorna l'element contingut a la cel·la visible 'cell'."
+    (nth 3 cell))
+(defun agent-sng656-cell-team     (cell)
+    "Retorna l'equip de l'element de la cel·la visible 'cell'."
+    (nth 4 cell))
+(defun agent-sng656-cell-painted  (cell)
+    "Retorna els colors que han pintat l'element de la cel·la visible 'cell'."
+    (nth 5 cell))
 
 ; predicats sobre cel·les del mapa
-(defun agent-sng656-is-land  (cell) (eq (agent-sng656-cell-type cell) AGENT-SNG656-LAND))
-(defun agent-sng656-is-lab   (cell) (eq (agent-sng656-cell-element cell) AGENT-SNG656-LAB))
-(defun agent-sng656-is-base  (cell) (eq (agent-sng656-cell-element cell) AGENT-SNG656-BASE))
-(defun agent-sng656-is-ball  (cell) (eq (agent-sng656-cell-element cell) AGENT-SNG656-BALL))
-(defun agent-sng656-is-empty (cell) (and (agent-sng656-is-land cell) (null (agent-sng656-cell-element cell))))
+(defun agent-sng656-is-land  (cell)
+    "Retorna cert si 'cell' és una cel·la de terra."
+    (eq (agent-sng656-cell-type cell) AGENT-SNG656-LAND))
+(defun agent-sng656-is-lab   (cell)
+    "Retorna cert si 'cell' conté un laboratori."
+    (eq (agent-sng656-cell-element cell) AGENT-SNG656-LAB))
+(defun agent-sng656-is-base  (cell)
+    "Retorna cert si 'cell' conté una base."
+    (eq (agent-sng656-cell-element cell) AGENT-SNG656-BASE))
+(defun agent-sng656-is-ball  (cell)
+    "Retorna cert si 'cell' conté una bolla."
+    (eq (agent-sng656-cell-element cell) AGENT-SNG656-BALL))
+(defun agent-sng656-is-empty (cell)
+    "Retorna cert si 'cell' és terra i no conté cap element."
+    (and (agent-sng656-is-land cell) (null (agent-sng656-cell-element cell))))
 
 ; **************************************************
 ; MEMÒRIA / VISIÓ COMPARTIDA
@@ -138,25 +189,33 @@
 ; entrada de la memòria: (turn cell)
 ;   turn:  torn en què es va observar la cel·la per darrera vegada
 ;   cell:  cel·la (mateix format que info-vision)
-(defun agent-sng656-entry-make  (turn cell) (list turn cell))
-(defun agent-sng656-entry-turn  (e) (car  e))
-(defun agent-sng656-entry-cell  (e) (cadr e))
-(defun agent-sng656-entry-coord (e) (agent-sng656-cell-coord (agent-sng656-entry-cell e)))
+(defun agent-sng656-entry-make  (turn cell)
+    "Crea una entrada de memòria amb el torn 'turn' i la cel·la visible 'cell'."
+    (list turn cell))
+(defun agent-sng656-entry-turn  (e)
+    "Retorna el torn de l'entrada de memòria 'e'."
+    (car  e))
+(defun agent-sng656-entry-cell  (e)
+    "Retorna la cel·la visible de l'entrada de memòria 'e'."
+    (cadr e))
+(defun agent-sng656-entry-coord (e)
+    "Retorna la coordenada de la cel·la de l'entrada de memòria 'e'."
+    (agent-sng656-cell-coord (agent-sng656-entry-cell e)))
 
-; cerca dins entries l'entrada amb la coord donada (o nil si no hi és)
 (defun agent-sng656-entry-at (entries coord)
+    "Cerca dins 'entries' l'entrada amb coordenada 'coord', o nil si no hi és."
     (cond ((null entries) nil)
           ((equal (agent-sng656-entry-coord (car entries)) coord) (car entries))
           (t (agent-sng656-entry-at (cdr entries) coord))))
 
-; cerca dins una llista de cel·les la que té la coord donada (o nil si no hi és)
 (defun agent-sng656-cell-at (cells coord)
+    "Cerca dins 'cells' la cel·la amb coordenada 'coord', o nil si no hi és."
     (cond ((null cells) nil)
           ((equal (agent-sng656-cell-coord (car cells)) coord) (car cells))
           (t (agent-sng656-cell-at (cdr cells) coord))))
 
-; crea cel·les sintètiques (coord nil) per coords visibles que no existeixen al mapa
 (defun agent-sng656-edge-cells (src vision offsets)
+    "Crea cel·les sintètiques (coord nil) per offsets visibles des de 'src' que no apareixen a 'vision'."
     (if (null offsets)
         nil
         (let ((coord (agent-sng656-add src (car offsets))))
@@ -165,8 +224,8 @@
                  (cons (list coord nil)
                        (agent-sng656-edge-cells src vision (cdr offsets)))))))
 
-; visió actual ampliada amb vores del mapa inferides
 (defun agent-sng656-known-cells (info)
+    "Retorna la visió actual d''info' ampliada amb vores del mapa inferides."
     (let ((vision (agent-sng656-info-vision info)))
          (append vision
                  (agent-sng656-edge-cells
@@ -174,35 +233,34 @@
                      vision
                      AGENT-SNG656-BALL-VISION-OFFSETS))))
 
-; combina la visió actual (etiquetada amb turn) amb la memòria
-; les entrades més recents sobreescriuen les antigues
 (defun agent-sng656-merge-vision (vision turn mem)
+    "Combina 'vision', etiquetada amb 'turn', amb 'mem'; les entrades més recents sobreescriuen les antigues."
     (let ((new (mapcar (lambda (c) (agent-sng656-entry-make turn c)) vision)))
         (append new (remove-if (lambda (e) (agent-sng656-entry-at new (agent-sng656-entry-coord e))) mem))))
 
-; descarta només bolles antigues: bases, labs, terreny i vores no es mouen
 (defun agent-sng656-entries-drop-old (entries turn)
+    "Descarta de 'entries' les bolles més antigues que AGENT-SNG656-AGE-MAX respecte 'turn'."
     (remove-if (lambda (e)
                    (and (agent-sng656-is-ball (agent-sng656-entry-cell e))
                         (> (- turn (agent-sng656-entry-turn e)) AGENT-SNG656-AGE-MAX)))
                entries))
 
-; entries que satisfan el predicat fun aplicat a la cel·la interna
 (defun agent-sng656-entries-where (entries fun)
+    "Filtra 'entries' mantenint les entrades on el predicat 'fun' és cert sobre la cel·la."
     (remove-if (lambda (e) (not (funcall fun (agent-sng656-entry-cell e)))) entries))
 
-; entrades que tenen una bolla enemiga
 (defun agent-sng656-enemy-balls (entries team)
+    "Retorna les entrades de 'entries' que contenen bolles enemigues de 'team'."
     (agent-sng656-entries-where entries
         (lambda (c) (and (agent-sng656-is-ball c) (not (eq (agent-sng656-cell-team c) team))))))
 
-; entrades que tenen una base enemiga
 (defun agent-sng656-enemy-bases (entries team)
+    "Retorna les entrades de 'entries' que contenen bases enemigues de 'team'."
     (agent-sng656-entries-where entries
         (lambda (c) (and (agent-sng656-is-base c) (not (eq (agent-sng656-cell-team c) team))))))
 
-; entrada que conté la nostra base
 (defun agent-sng656-friendly-base (entries team)
+    "Retorna la primera entrada de 'entries' que conté la base pròpia de 'team'."
     (car (agent-sng656-entries-where entries
         (lambda (c) (and (agent-sng656-is-base c) (eq (agent-sng656-cell-team c) team))))))
 
@@ -210,9 +268,8 @@
 ; ESTRATÈGIA DE LA BASE
 ; **************************************************
 
-; cerca el primer veïnat que sigui terra buida dins de entries
-; recorre la llista d'offsets recursivament i retorna la primera coord vàlida (o nil)
 (defun agent-sng656-find-empty-neighbour (src entries offsets)
+    "Recorre 'offsets' i retorna la primera coordenada veïna de 'src' que és terra buida dins 'entries'."
     (if (null offsets)
         nil
         (let* ((dst (agent-sng656-add src (car offsets)))
@@ -224,20 +281,20 @@
                     ; veí no serveix: provam el següent offset
                     (agent-sng656-find-empty-neighbour src entries (cdr offsets))))))
 
-; pes d'una cel·la enemiga segons el seu tipus
 (defun agent-sng656-color-weight (cell)
+    "Retorna el pes ofensiu de 'cell' per triar colors de bolles noves."
     (cond ((agent-sng656-is-base cell) 10)
           ((agent-sng656-is-ball cell) 1)
           (t 0)))
 
-; vector (r g b) on cada element val 1 si la unitat NO està pintada amb aquell color
 (defun agent-sng656-missing-counts (cell)
+    "Retorna el vector ponderat (r g b) dels colors que falten a la unitat de 'cell'."
     (let ((w (agent-sng656-color-weight cell))
           (painted (agent-sng656-cell-painted cell)))
          (mapcar (lambda (c) (if (member c painted) 0 w)) AGENT-SNG656-RGB)))
 
-; suma vectorial (r g b): per cada enemic visible, agrega missing-counts ponderat
 (defun agent-sng656-missing-total (entries team)
+    "Agrega els vectors de colors que falten als enemics de 'team' coneguts dins 'entries'."
     (reduce #'agent-sng656-add
             (mapcar (lambda (e) (agent-sng656-missing-counts (agent-sng656-entry-cell e)))
                     (append (agent-sng656-enemy-bases entries team)
@@ -248,6 +305,7 @@
 ;   - si veiem enemics, agreguem els colors que els falten ponderats per tipus i triem el màxim
 ;   - si no, rotam entre r/g/b segons (mod ronda 3) per variar
 (defun agent-sng656-base-pick-color (info entries)
+    "Tria el color d'una bolla nova a partir de l'estat 'info' i les entrades conegudes 'entries'."
     (let* ((team (agent-sng656-info-team info))
            (totals (agent-sng656-missing-total entries team))
            (idx (agent-sng656-argmax totals)))
@@ -262,6 +320,7 @@
 ;   - si tenim un veí buit, hi creem una bolla amb un color útil
 ;   - altrament, no fem res
 (defun agent-sng656-base (info entries)
+    "Decideix les accions de base per la unitat descrita per 'info' usant les entrades 'entries'."
     (cond ; sense pintura suficient no intentam crear cap bolla
           ((< (agent-sng656-info-paint info) AGENT-SNG656-BALL-COST) nil)
           ; tenim pintura: cercam una casella adjacent buida on la creació sigui vàlida
@@ -283,6 +342,7 @@
 ;   base enemiga: 1000  bolla enemiga: 100  lab no nostre: 50
 ;   altre: 0
 (defun agent-sng656-score-cell (cell team)
+    "Retorna la puntuació tàctica base de 'cell' com a objectiu per l'equip 'team'."
     (cond ((eq (agent-sng656-cell-team cell) team) 0)
           ((agent-sng656-is-base cell) 1000)
           ((agent-sng656-is-ball cell) 100)
@@ -292,13 +352,13 @@
 ; puntuació d'una entrada: la base menys l'antiguitat (cap a 0 mai)
 ; així informació recent és preferida sense descartar del tot la antiga
 (defun agent-sng656-score-entry (entry team turn)
+    "Retorna la puntuació de l'entrada 'entry' per 'team' al torn 'turn', penalitzada per antiguitat."
     (let ((age (- turn (agent-sng656-entry-turn entry)))
           (raw (agent-sng656-score-cell (agent-sng656-entry-cell entry) team)))
          (max 0 (- raw age))))
 
-; entre una llista d'entries, retorna la millor entry
-; criteris: més puntuació primer, després més propera a src; nil si cap puntua > 0
 (defun agent-sng656-best-entry (entries src team turn)
+    "Retorna la millor entrada de 'entries' per 'team' des de 'src': més puntuació i després més proximitat."
     (car (reduce (lambda (best e)
                     (let* ((s (agent-sng656-score-entry e team turn))
                            (d (agent-sng656-dist (agent-sng656-entry-coord e) src)))
@@ -314,8 +374,8 @@
                               (t best))))
                 entries :initial-value nil)))
 
-; millor objectiu a pintar: entry dins del rang de pintar amb puntuació > 0
 (defun agent-sng656-best-paint-target (info entries)
+    "Retorna el millor objectiu dins rang de pintar per la unitat descrita per 'info'."
     (let* ((src (agent-sng656-info-coord info))
            (team (agent-sng656-info-team info))
            (turn (agent-sng656-info-turn info))
@@ -325,15 +385,15 @@
                                  entries)))
         (agent-sng656-best-entry in-range src team turn)))
 
-; compta quants veïns d'una coord encara no són a la memòria/visió compartida
 (defun agent-sng656-unknown-neighbours (coord entries)
+    "Compta quants veïns de 'coord' encara no apareixen dins la memòria compartida 'entries'."
     (agent-sng656-sum (mapcar
         (lambda (off) (agent-sng656-bool-int
             (null (agent-sng656-entry-at entries (agent-sng656-add coord off)))))
         AGENT-SNG656-NEIGH-OFFSETS)))
 
-; construeix el candidat de frontera (entry unknown base-dist ball-dist) per una entry
 (defun agent-sng656-frontier-candidate (entry entries origin src)
+    "Construeix el candidat de frontera (entry unknown base-dist ball-dist) per 'entry'."
     (let* ((coord (agent-sng656-entry-coord entry))
            ; només les caselles buides poden ser fronteres explorables
            (unknown (if (agent-sng656-is-empty (agent-sng656-entry-cell entry))
@@ -347,8 +407,8 @@
               ; candidat vàlid per comparar dins best-frontier-target
               (list entry unknown base-dist ball-dist))))
 
-; compara dos candidats de frontera i retorna el millor segons la prioritat definida
 (defun agent-sng656-better-frontier (best candidate)
+    "Compara 'best' i 'candidate' com a fronteres d'exploració i retorna el millor."
     (cond ; si entry no era frontera, no pot millorar el millor candidat
           ((null candidate) best)
           ; primer candidat de frontera vàlid
@@ -370,6 +430,7 @@
 ; té format (entry unknown base-dist ball-dist), on unknown és el nombre de veïns desconeguts.
 ; criteri: maximitzar unknown, després maximitzar base-dist i finalment minimitzar ball-dist.
 (defun agent-sng656-best-frontier-target (info entries)
+    "Retorna la millor entrada de frontera exploratòria per la unitat descrita per 'info'."
     (let* ((src (agent-sng656-info-coord info))
            (team (agent-sng656-info-team info))
            (own-base-entry (agent-sng656-friendly-base entries team))
@@ -378,8 +439,8 @@
                        entries
                        :initial-value nil))))
 
-; millor objectiu tàctic conegut: enemic o laboratori no propi
 (defun agent-sng656-best-tactical-target (info entries)
+    "Retorna el millor objectiu tàctic conegut dins 'entries' per la unitat descrita per 'info'."
     (agent-sng656-best-entry entries
                              (agent-sng656-info-coord info)
                              (agent-sng656-info-team info)
@@ -389,6 +450,7 @@
 ; cada candidat ha de ser terra buida i present a entries (això garanteix que sigui dins del mapa)
 ; acumulador best té format (coord d²)
 (defun agent-sng656-best-step-rec (src entries target offsets best)
+    "Avalua recursivament 'offsets' i retorna el millor pas des de 'src' cap a 'target'."
     (cond ; ja hem avaluat tots els veïns possibles: retornam el millor pas
           ((null offsets) best)
           ; avaluam el veí indicat pel primer offset pendent
@@ -404,20 +466,20 @@
                         ; veí invalid o desconegut: l'ignoram
                         (agent-sng656-best-step-rec src entries target (cdr offsets) best))))))
 
-; versió simple d'un pas greedy cap a qualsevol objectiu de moviment
 (defun agent-sng656-step-towards (src entries target)
+    "Retorna un pas greedy des de 'src' cap a 'target' usant les cel·les conegudes 'entries'."
     (let ((best (agent-sng656-best-step-rec src entries target AGENT-SNG656-NEIGH-OFFSETS nil)))
          (if best (car best) nil)))
 
-; pas greedy que només accepta acostar-se realment al target
 (defun agent-sng656-step-closer (src entries target)
+    "Retorna un pas greedy des de 'src' només si redueix la distància a 'target'."
     (let ((step (agent-sng656-step-towards src entries target)))
          (if (and step (< (agent-sng656-dist step target) (agent-sng656-dist src target)))
              step
              nil)))
 
-; moviment d'exploració cap a la millor frontera coneguda
 (defun agent-sng656-frontier-step (info entries)
+    "Retorna un pas d'exploració cap a la millor frontera coneguda per la unitat d''info'."
     (let* ((src (agent-sng656-info-coord info))
            (target (agent-sng656-best-frontier-target info entries))
            (target-coord (if target (agent-sng656-entry-coord target) nil)))
@@ -425,8 +487,8 @@
               (agent-sng656-step-towards src entries target-coord)
               nil)))
 
-; moviment greedy: avança cap al millor objectiu conegut, tàctic o exploratori
 (defun agent-sng656-best-move-step (info entries)
+    "Retorna el millor pas de moviment tàctic o exploratori per la unitat descrita per 'info'."
     (let* ((src (agent-sng656-info-coord info))
            (target (agent-sng656-best-tactical-target info entries))
            (target-coord (if target (agent-sng656-entry-coord target) nil)))
@@ -439,10 +501,8 @@
                 (t (let ((step (agent-sng656-step-closer src entries target-coord)))
                        (if step step (agent-sng656-frontier-step info entries)))))))
 
-; estratègia de la bolla:
-;   - intenta pintar el millor objectiu en rang (si tr-paint < 1)
-;   - intenta moure cap a l'objectiu de més puntuació (si tr-move < 1)
 (defun agent-sng656-ball (info entries)
+    "Decideix accions de bolla per 'info': pintar si tr-paint ho permet i moure si tr-move ho permet."
     (let* ((tr-paint (agent-sng656-info-tr-paint info))
            (tr-move  (agent-sng656-info-tr-move  info))
            ; només cercam tret si el temps de recuperació permet pintar
@@ -467,6 +527,7 @@
 ;      tenguin la mateixa visió en el pròxim torn
 ;   3. crida l'estratègia corresponent passant les entries fusionades
 (defun agent-sng656 (info)
+    "Retorna les accions de l'agent SNG656 per la unitat descrita per 'info'."
     (let* ((unit (agent-sng656-info-unit info))
            (turn (agent-sng656-info-turn info))
            ; fusionam visió i memòria abans de decidir, així cada unitat usa el millor mapa conegut
