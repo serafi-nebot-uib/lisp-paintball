@@ -158,11 +158,23 @@
                            (agent-jgr448-far-step-rec src cells away (cdr offsets) best best-d)))
                   (agent-jgr448-far-step-rec src cells away (cdr offsets) best best-d)))))
 
+(defun agent-jgr448-rotate (lst n)
+    "Rota 'lst' n posicions a l'esquerra."
+    (if (or (null lst) (zerop n))
+        lst
+        (agent-jgr448-rotate (append (cdr lst) (list (car lst))) (1- n))))
+
+; rota la llista d'offsets segons la coordenada de la bolla per trencar empats: així,
+; quan diversos veïns són igualment llunyans (i tots els diagonals quan no es veu la
+; base), bolles a posicions diferents proven ordres diferents i no van totes cap a
+; (-1 -1)
 (defun agent-jgr448-explore-step (src cells team)
     "Pas d'exploració: el veí buit més llunyà de la base pròpia (o qualsevol si no la veu)."
-    (let* ((fbase (agent-jgr448-friendly-base cells team))
-           (away  (if fbase (agent-jgr448-cell-coord fbase) src)))
-          (agent-jgr448-far-step-rec src cells away AGENT-JGR448-NEIGH-OFFSETS nil 0)))
+    (let* ((fbase   (agent-jgr448-friendly-base cells team))
+           (away    (if fbase (agent-jgr448-cell-coord fbase) src))
+           (rot     (mod (+ (car src) (cadr src)) (length AGENT-JGR448-NEIGH-OFFSETS)))
+           (offsets (agent-jgr448-rotate AGENT-JGR448-NEIGH-OFFSETS rot)))
+          (agent-jgr448-far-step-rec src cells away offsets nil 0)))
 
 (defun agent-jgr448-ball (info cells)
     "Pinta el primer objectiu útil dins rang i sempre fa un pas d'exploració."
