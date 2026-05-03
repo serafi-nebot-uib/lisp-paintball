@@ -266,7 +266,7 @@
            (msg-num0 (if (eq winner TEAM-1) "1" "2"))
            (msg-txt0-x (+ msg-x (round (/ (- msg-w (get-str-width msg-txt0 msg-scale)) 2))))
            (msg-txt1-x (+ msg-x (round (/ (- msg-w (get-str-width msg-txt1 msg-scale)) 2))))
-           (msg-num0-x  (+ msg-x (round (/ (- msg-w (get-str-width msg-num0 num-scale)) 2))))
+           (msg-num0-x (+ msg-x (round (/ (- msg-w (get-str-width msg-num0 num-scale)) 2))))
            (line-spacing (* msg-scale 2))
            (line-h (+ (* BITMAP-HEIGHT msg-scale) line-spacing))
            (line-w (get-str-width "L'EQUIP" msg-scale))
@@ -298,7 +298,7 @@
         (cond ((= turn 0)
             (draw-str tn-txt0 tn-x0 tn-y0 tn-scale0)
             (draw-str tn-txt1 tn-x1 tn-y1 tn-scale1))
-         (t (draw-str tn-num-txt  tn-num-x  tn-num-y  tn-num-scale  :max-cs tn-num-max-cs)))))
+         (t (draw-str tn-num-txt tn-num-x tn-num-y tn-num-scale :max-cs tn-num-max-cs)))))
 
 (defun team-panel (xi yi container-w team turn)
     "Dibuixa i actualitza el panell on s'informa de l'equip 'team' que està jugant al torn actual"
@@ -387,8 +387,7 @@
                            (colbox-x  (if (eq base-team TEAM-1) colbox-t1-x colbox-t2-x))
                            (colbox-y  (if (eq base-team TEAM-1) colbox-t1-y colbox-t2-y)))
                         (base-color-upd colbox-x colbox-y colbox-size colbox-bord-thck new-color)))
-                (base-color-panel x0 y0 container-w (cdr updates) turn)
-            )))
+                (base-color-panel x0 y0 container-w (cdr updates) turn))))
         nil))
 
 ; dibuixa i actualitza a cada torn una graella amb algunes de les estadístiques a destacar durant el joc com són
@@ -428,8 +427,7 @@
            (lq-t-txt  (strcat team-labs))
            (stats-max-cs-h  (* stats-scale BITMAP-HEIGHT))
            (stats-base-cs-w (* stats-scale BITMAP-WIDTH))
-           (pq-t-max-cs (list (* (min 4 (1+ (maxlen pq-t1-txt pq-t2-txt))) stats-base-cs-w)
-                               stats-max-cs-h))
+           (pq-t-max-cs (list (* (min 4 (1+ (maxlen pq-t1-txt pq-t2-txt))) stats-base-cs-w) stats-max-cs-h))
            (pm-t-max-cs (list 20 stats-max-cs-h))
            (lq-t-max-cs (list (* 2 stats-base-cs-w) stats-max-cs-h))
            (pq-t-txt (if (> (length pq-t1-txt) (length pq-t2-txt)) pq-t1-txt pq-t2-txt))
