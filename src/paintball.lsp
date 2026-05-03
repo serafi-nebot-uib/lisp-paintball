@@ -6,15 +6,9 @@
 ;; Fitxer del controlador principal.
 ;; <Descripció de les funcions d'aquest fitxer>
 
-;; Necessari per a l'optimització de crides recursives.
-; (load 'common) ; https://almy.us/files/xl305req.zip
-; (load 'tco)    ; https://github.com/antoni-oliver/defun-tco
-
-;; Altres fitxers de la pràctica:
 (load "grafics.lsp")
 (load "tco.lsp")
 
-; TODO: canviar els noms dels fitxers d'agents pel codi d'aula dels autors
 (load "agent-sng656.lsp")
 (load "agent-jgr448.lsp")
 
@@ -148,7 +142,7 @@
           ((member (car lst) (cdr lst)) (unique (cdr lst)))
           (t (cons (car lst) (unique (cdr lst))))))
 
-(defun neq (a b) (not (eq 'a 'b)))
+(defun neq (a b) (not (eq a b)))
 
 ; **************************************************
 ; MAP
@@ -274,7 +268,7 @@
                 (cond
                     ; unitat és un lab -> captura per a l'equip atacant
                     ((cell-has-lab cell) (cell-unit-team cell team))
-                    ; unitat és una base o una bolla -> afageix color a pintat i comprova si s'ha d'eliminar
+                    ; unitat és una base o una bolla -> afegeix color a pintat i comprova si s'ha d'eliminar
                     ((or (cell-has-base cell) (cell-has-ball cell))
                         (let ((paint (cons color (cell-unit-paint cell))))
                             (if (paint-check-all paint)
@@ -480,8 +474,11 @@
                                    (dst-cell-new (cell-apply-paint team dst-cell ball-color))
                                    (src-upd (list (car src) (cadr src) src-cell-new))
                                    (dst-upd (list (car target) (cadr target) dst-cell-new))
-                                   (state-next (state-map state (map-update m src-upd dst-upd))))
-                                (list state-next (list ACTION-PAINT src-upd dst-upd)))))
+                                   (state-next (state-map state (map-update m src-upd dst-upd)))
+                                   (act-id (if (and (cell-has-base dst-cell)
+                                                    (not (cell-has-base dst-cell-new)))
+                                                'ELIMINA-BASE ACTION-PAINT)))
+                                (list state-next (list act-id src-upd dst-upd)))))
                     ; l'acció és invàlida, no s'aplica cap canvi al mapa
                     (list state nil)))
             (list state nil))))
@@ -666,7 +663,7 @@
 ; usa defun-tco per evitar desbordament de pila en partides llargues
 (defun-tco game-loop (state)
     (if (game-check-end state)
-        (game-winner state)
+        (graphics-end (game-winner state))
         (game-loop (game-turn state))))
 
 ; punt d'entrada: carrega el mapa, genera el desplaçament aleatori de coordenades i inicia la partida
