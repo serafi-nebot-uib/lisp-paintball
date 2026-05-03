@@ -23,9 +23,8 @@
 ;;   que una posició antiga de memòria.
 ;; - Per moure's, les bolles ataquen primer objectius tàctics coneguts. Si no hi ha
 ;;   enemics ni laboratoris, les bolles exploradores cerquen fronteres: caselles de
-;;   terra buida conegudes amb veïns desconeguts. La millor frontera és la que obre
-;;   més cel·les desconegudes; en empat, es prefereix anar més lluny de la nostra
-;;   base i, finalment, triar l'opció més propera a la bolla actual.
+;;   terra buida conegudes amb veïns desconeguts. Cada bolla prefereix explorar en
+;;   una direcció segons id-unitat mod 8, considerant només els 8 veïns immediats.
 
 ; **************************************************
 ; CONSTANTS
@@ -117,6 +116,9 @@
 (defun agent-sng656-info-paint     (info)
     "Retorna la pintura disponible de la llista d'informació 'info'."
     (nth 2  info))
+(defun agent-sng656-info-id        (info)
+    "Retorna l'id de la unitat de la llista d'informació 'info'."
+    (nth 3  info))
 (defun agent-sng656-info-unit      (info)
     "Retorna el tipus d'unitat de la llista d'informació 'info'."
     (nth 4  info))
@@ -227,11 +229,13 @@
 (defun agent-sng656-known-cells (info)
     "Retorna la visió actual d''info' ampliada amb vores del mapa inferides."
     (let ((vision (agent-sng656-info-vision info)))
-         (append vision
-                 (agent-sng656-edge-cells
-                     (agent-sng656-info-coord info)
-                     vision
-                     AGENT-SNG656-BALL-VISION-OFFSETS))))
+         (if (eq (agent-sng656-info-unit info) AGENT-SNG656-BASE)
+             vision
+             (append vision
+                     (agent-sng656-edge-cells
+                         (agent-sng656-info-coord info)
+                         vision
+                         AGENT-SNG656-BALL-VISION-OFFSETS)))))
 
 (defun agent-sng656-merge-vision (vision turn mem)
     "Combina 'vision', etiquetada amb 'turn', amb 'mem'; les entrades més recents sobreescriuen les antigues."
@@ -392,52 +396,21 @@
             (null (agent-sng656-entry-at entries (agent-sng656-add coord off)))))
         AGENT-SNG656-NEIGH-OFFSETS)))
 
-(defun agent-sng656-frontier-candidate (entry entries origin src)
-    "Construeix el candidat de frontera (entry unknown base-dist ball-dist) per 'entry'."
-    (let* ((coord (agent-sng656-entry-coord entry))
-           ; només les caselles buides poden ser fronteres explorables
-           (unknown (if (agent-sng656-is-empty (agent-sng656-entry-cell entry))
-                        (agent-sng656-unknown-neighbours coord entries)
-                        0))
-           (base-dist (agent-sng656-dist coord origin))
-           (ball-dist (agent-sng656-dist coord src)))
-          (if (zerop unknown)
-              ; sense veïns desconeguts, aquesta casella no obre mapa nou
-              nil
-              ; candidat vàlid per comparar dins best-frontier-target
-              (list entry unknown base-dist ball-dist))))
+(defun agent-sng656-unknown-visible-cells (coord entries)
+    "Compta quantes cel·les serien desconegudes des de 'coord' amb visió de bolla."
+    (agent-sng656-sum (mapcar
+        (lambda (off) (agent-sng656-bool-int
+            (null (agent-sng656-entry-at entries (agent-sng656-add coord off)))))
+        AGENT-SNG656-BALL-VISION-OFFSETS)))
 
-(defun agent-sng656-better-frontier (best candidate)
-    "Compara 'best' i 'candidate' com a fronteres d'exploració i retorna el millor."
-    (cond ; si entry no era frontera, no pot millorar el millor candidat
-          ((null candidate) best)
-          ; primer candidat de frontera vàlid
-          ((null best) candidate)
-          ; prioritat principal: màxim nombre de cel·les per descobrir
-          ((> (cadr candidate) (cadr best)) candidate)
-          ; en empat de cel·les per descobrir, preferim avançar cap enfora de la base
-          ((and (= (cadr candidate) (cadr best))
-                (> (caddr candidate) (caddr best))) candidate)
-          ; si també empata la distància a la base, preferim desplaçaments propers a la cel·la actual
-          ((and (= (cadr candidate) (cadr best))
-                (= (caddr candidate) (caddr best))
-                (< (nth 3 candidate) (nth 3 best))) candidate)
-          ; mantenim el millor candidat anterior
-          (t best)))
+(defun agent-sng656-preferred-direction (info)
+    "Retorna la direcció d'exploració preferida segons id-unitat mod 8."
+    (nth (mod (agent-sng656-info-id info) (length AGENT-SNG656-NEIGH-OFFSETS))
+         AGENT-SNG656-NEIGH-OFFSETS))
 
-; millor entry d'exploració quan no hi ha enemics/labs a la memòria.
-; només considera terra buida amb almenys un veí desconegut. internament, el valor best
-; té format (entry unknown base-dist ball-dist), on unknown és el nombre de veïns desconeguts.
-; criteri: maximitzar unknown, després maximitzar base-dist i finalment minimitzar ball-dist.
-(defun agent-sng656-best-frontier-target (info entries)
-    "Retorna la millor entrada de frontera exploratòria per la unitat descrita per 'info'."
-    (let* ((src (agent-sng656-info-coord info))
-           (team (agent-sng656-info-team info))
-           (own-base-entry (agent-sng656-friendly-base entries team))
-           (origin (if own-base-entry (agent-sng656-entry-coord own-base-entry) src)))
-          (car (reduce (lambda (best entry) (agent-sng656-better-frontier best (agent-sng656-frontier-candidate entry entries origin src)))
-                       entries
-                       :initial-value nil))))
+(defun agent-sng656-direction-score (coord origin direction)
+    "Retorna el producte escalar entre el desplaçament origin->coord i 'direction'."
+    (agent-sng656-sum (agent-sng656-mul (agent-sng656-sub coord origin) direction)))
 
 (defun agent-sng656-best-tactical-target (info entries)
     "Retorna el millor objectiu tàctic conegut dins 'entries' per la unitat descrita per 'info'."
@@ -478,14 +451,44 @@
              step
              nil)))
 
-(defun agent-sng656-frontier-step (info entries)
-    "Retorna un pas d'exploració cap a la millor frontera coneguda per la unitat d''info'."
+(defun agent-sng656-local-frontier-candidate (src entries direction offset)
+    "Construeix candidat local (coord unknown dir-score) per un veí exploratori."
+    (let* ((coord (agent-sng656-add src offset))
+           (entry (agent-sng656-entry-at entries coord))
+           (cell (agent-sng656-entry-cell entry))
+           (unknown (if (and cell (agent-sng656-is-empty cell))
+                        (agent-sng656-unknown-visible-cells coord entries)
+                        0)))
+          (if (zerop unknown)
+              nil
+              (list coord unknown (agent-sng656-direction-score coord src direction)))))
+
+(defun agent-sng656-better-local-frontier (best candidate)
+    "Compara candidats locals prioritzant direcció preferida i cel·les desconegudes."
+    (cond ((null candidate) best)
+          ((null best) candidate)
+          ((and (> (nth 2 candidate) 0) (<= (nth 2 best) 0)) candidate)
+          ((and (<= (nth 2 candidate) 0) (> (nth 2 best) 0)) best)
+          ((> (cadr candidate) (cadr best)) candidate)
+          ((and (= (cadr candidate) (cadr best))
+                (> (nth 2 candidate) (nth 2 best))) candidate)
+          (t best)))
+
+(defun agent-sng656-local-frontier-step (info entries)
+    "Tria un veí exploratori local amb preferència direccional."
     (let* ((src (agent-sng656-info-coord info))
-           (target (agent-sng656-best-frontier-target info entries))
-           (target-coord (if target (agent-sng656-entry-coord target) nil)))
-          (if target-coord
-              (agent-sng656-step-towards src entries target-coord)
-              nil)))
+           (direction (agent-sng656-preferred-direction info))
+           (best (reduce (lambda (best offset)
+                             (agent-sng656-better-local-frontier
+                                 best
+                                 (agent-sng656-local-frontier-candidate src entries direction offset)))
+                         AGENT-SNG656-NEIGH-OFFSETS
+                         :initial-value nil)))
+          (if best (car best) nil)))
+
+(defun agent-sng656-frontier-step (info entries)
+    "Retorna un pas d'exploració local per la unitat d''info'."
+    (agent-sng656-local-frontier-step info entries))
 
 (defun agent-sng656-best-move-step (info entries)
     "Retorna el millor pas de moviment tàctic o exploratori per la unitat descrita per 'info'."
@@ -497,9 +500,9 @@
                 ; si ja podem pintar l'objectiu, no ens n'allunyam
                 ((<= (agent-sng656-dist src target-coord) AGENT-SNG656-PAINT-RANGE)
                  nil)
-                ; si l'atac greedy queda bloquejat, deixam que l'exploració cerqui alternativa
-                (t (let ((step (agent-sng656-step-closer src entries target-coord)))
-                       (if step step (agent-sng656-frontier-step info entries)))))))
+                 ; si hi ha objectiu tàctic conegut, no canviam a exploració
+                 (t (let ((step (agent-sng656-step-closer src entries target-coord)))
+                       (if step step nil))))))
 
 (defun agent-sng656-ball (info entries)
     "Decideix accions de bolla per 'info': pintar si tr-paint ho permet i moure si tr-move ho permet."
