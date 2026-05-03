@@ -1,10 +1,10 @@
 ;; Pràctica final de Llenguatges de Programació.
 ;; LISP - Paintball.
-;; Estudiants: ABC, XYZ.
+;; Estudiants: Serafí Nebot Ginard, Jaume Galmés Ramis.
 ;; Professor: XXX.
 ;; Lliurament: primera convocatòria.
 ;; Fitxer del mòdul gràfic.
-;; <Descripció de les funcions d'aquest fitxer>
+;; Dins aquest fitxer es troben tots els mètodes que permeten graficar el joc LISP Paint Ball
 
 ; **************************************************
 ; CONSTANTS
@@ -15,10 +15,16 @@
 (defconstant CELL-MIN-SIZE         6)   ; px
 (defconstant CELL-MAX-SIZE         18)
 (defconstant CELL-BORD-THCK        1)
-(defconstant SB-MIN-WIDTH          480) ; Sidebar minimum width
-(defconstant SB-FIXED-WIDTH        t)   ; Sidebar adjustment policy, t expands board container, nil prioritizes symmetrical board margins expanding sidebar
-(defconstant BOARD-DELIM-W         2)   ; delimiter width
+
+; Política d'ajustament de la barra lateral,
+; t manté el tamany fixe, expandint el contenidor del tauler
+; nil prioritza els marges simètrics del tauler, expandint la barra lateral
+(defconstant SB-FIXED-WIDTH        t)
+(defconstant SB-MIN-WIDTH          480) ; amplada mínima de la barra lateral
+(defconstant BOARD-DELIM-W         2)   ; amplada del delimitador entre contenidors
 (defconstant BOARD-MAX-COLS        60)
+
+;colors que s'empren de forma global al llarg del codi
 (defconstant BLACK                 '(0 0 0))
 (defconstant RED                   '(255 0 0))
 (defconstant GREEN                 '(0 255 0))
@@ -27,13 +33,15 @@
 (defconstant SOFT-WHITE            '(240 240 240))
 (defconstant WATER-COL             '(205 205 255))
 (defconstant LAND-COL              '(216 163 133))
-(defconstant PAINT-CELL-COL        t) ; t paints cell color, nil paints land color
-(defconstant LAND-COL-RED          '(255 128 109));'(255 160 136))
+(defconstant LAND-COL-RED          '(255 128 109))
 (defconstant LAND-COL-GREEN        '(205 168 126))
 (defconstant LAND-COL-BLUE         '(166 139 207))
+; t pinta el color de la cel·la, nil pinta color de terra
+(defconstant PAINT-CELL-COL        t)
 (defconstant DEF-TEXT-COL          BLACK)
 (defconstant DEF-MARG-COL          BLACK)
 (defconstant BACKGROUND-COL        WHITE)
+; desactiva el dibuixat global de la marca d'aigua del joc
 (defconstant SHOW-WATERMARK        t)
 
 ; **************************************************
@@ -157,15 +165,15 @@
 ; **************************************************
 ; BITMAP/STRING
 ; **************************************************
-; strings are drawn by having a bitmap representation of every possible character and drawing it.
-; a bitmap is an array where each cell represents a pixel.
-;    1 means the pixel should be painted
-;    0 means the pixel should not be painted
-; with this representation it is very easy to define a 5x6 pixel character representation
-; an empty row and column is left empty for every character to provide spacing
-; this is done through the FONT-WIDTH and FONT-HEIGHT (5x6 +1 -> 6x7) which dictate the total
-; width and height of the final drawn character.
-
+; el strings es dibuixen a partir d'una representació en forma de mapa de bits de cada possible caràcter.
+; un mapa de bits és un array on cada cel·la representa un píxel.
+;    1 indica que el píxel ha de ser pintat
+;    0 indica que el píxel no ha de ser pintat
+; a partir d'aquest format resulta senzill definir una representació de caràcter de 5x6 píxels.
+; cal destacar que amb la finalitat de espaiar els caràcters s'ha deixat una fila i una columna
+; buides al mapa de bits de cada caràcter, això es fa a partir de FONT-WIDTH i FONT-HEIGHT que dicten
+; l'amplada i l'alçada del caràcter final dibuixat.
+;
 ; https://fontstruct.com/fontstructions/show/2122607/5x6-font-3
 (load "font.lsp")
 
@@ -214,6 +222,11 @@
 ; ******************************************************************************************
 
 ;TODO: add optional shadow to board
+; mètode general d'actualització del fitxer "grafics.lsp", s'encarrèga d'obtenir el mapa, cridar als mètodes
+; d'actualització generals (barra lateral i mapa) amb els canvis realitzats, i calcular a partir de
+; la política seleccionada de la barra lateral [fixa (tamany mínim de barra lateral) o mòvil]:
+; - El tamany de cel·la, intentant que aquesta sigui la màxima possible sense sobrepassar l'espai disponible.
+; - El posicionament absolut del tauler o mapa dins de l'interfície de mode que aquesta es trobi centrada
 (defun graphics-upd (state &optional (updates nil))
     (let* ((m (state-map state))
            (map-h (map-height m))
@@ -235,13 +248,12 @@
                   (when SHOW-WATERMARK (draw-watermark (+ board-container-size 35) 100 (- XLISP-WINDOW-WIDTH board-container-size) XLISP-WINDOW-HEIGHT 5))
                   (set-color BLACK)
                   (fill-rect board-container-size 0 BOARD-DELIM-W XLISP-WINDOW-HEIGHT)
-                  (draw-map m xi yi 0 cell-size)
-                ;;   (graphics-end TEAM-1)
-              )   
+                  (draw-map m xi yi 0 cell-size))   
               (updates (paint-changes xi yi cell-size updates))
               (t nil))
          (status-sidebar-upd state board-container-size updates)))
 
+; rep i grafica el guanyador de la partida
 (defun graphics-end (winner)
     (let* ((msg-scale 2)
            (num-scale (+ msg-scale 1))
@@ -267,6 +279,7 @@
         (draw-str msg-txt1 msg-txt1-x (+ msg-y (* line-h 2) (- 10)) msg-scale)
         (draw-str msg-num0 msg-num0-x (+ msg-y (* line-h 0) 0) num-scale)))
 
+; dibuixa i actualitza el comptador de torn
 (defun turn-counter-panel (xi yi container-w team turn)
     (let* ((tn-scale0 2)     (tn-txt0 "JUGADA ") ; (tn-txt0 "TORN ")
            (tn-scale1 2)     (tn-txt1 "N*")
@@ -285,6 +298,7 @@
             (draw-str tn-txt1 tn-x1 tn-y1 tn-scale1))
          (t (draw-str tn-num-txt  tn-num-x  tn-num-y  tn-num-scale  :max-cs tn-num-max-cs)))))
 
+; dibuixa i actualitza el panell on s'informa de l'equip que està jugant al torn actual
 (defun team-panel (xi yi container-w team turn)
     (let* ((td-scale0 2)      (td-txt0 "Torn de")
            (td-scale1 2)      (td-txt1 "l'equip ")
@@ -303,6 +317,7 @@
             (draw-str td-txt1 td-x1 td-y1 td-scale1))
          (t (draw-str td-team-txt td-team-x td-team-y td-team-scale :max-cs td-max-cs)))))
 
+; actualitza els requadres que representen els colors dels quals està pintada una base 
 (defun base-color-upd (colbox-x0 colbox-y0 colbox-size colbox-bord-thck &optional rgb-col)
     (let* ((colbox-inner-size (- colbox-size (* colbox-bord-thck 2)))
            (colbox-inner-x0 (+ colbox-x0 colbox-bord-thck))
@@ -323,6 +338,7 @@
                  (moverel (- colbox-size colbox-bord-thck) 0)
                  (square-outline-rel colbox-size colbox-bord-thck)))))
 
+; dibuixa i gestiona els marcadors de colors pintats de cada una de les bases
 (defun base-color-panel (x0 y0 container-w &optional updates turn)
     (if (or (= turn 0) updates)
         (let* ((act-upd  (car updates))
@@ -371,8 +387,8 @@
             )))
         nil))
 
-;; TODO: Marco que canvii amb es color de s'equip actual, fer mètode draw-rect-rel
-;; (square-outline-rel (get-str-width (strcat td-txt1 td-team-txt) td-scale1) (+ td-y0 10)) 
+; dibuixa i actualitza a cada torn una graella amb algunes de les estadístiques a destacar durant el joc com són
+; la quantitat de pintura, el multiplicador de pintura per torn i el nombre de laboratoris capturats per equip
 (defun stats-table (xi container-w state turn team)
     (let* ((m (state-map state))
            (e1-paint  (state-paint state TEAM-1))
@@ -444,7 +460,12 @@
                 (draw-str lq-t-txt  (+ lq-x0 lq-t-margin-x) t-y    stats-scale :max-cs lq-t-max-cs :bcol t-bcol))))))
                                             ;;  pm-t-margin-x)
 
-; full-COORDS-length '(XX,YY) (XX,YY)' = 15 ; pA-full-length ' (XX,YY)' = 8 ; number width = 5 ; (XX,YY) width = 25
+; mètode que formata i dibuixa en pantalla la llista d'actualitzacions dutes a terme a cada torn, incloent
+; la destrucció d'una base. Cada línia es composa per:
+; - l'identificador de l'acció
+; - les cel·la on s'aplica l'acció (origen i destí si l'acció involucra dues cel·les)
+; - el color (R)/(G)/(B) del qual ha estat pintada una casella/unitat si es tracta d'una acció PINTA
+; full-COORDS-length '(XX,YY) (XX,YY)' = 15 ; pA-full-length ' (XX,YY)' = 8 ; number width = 5 ; (XX,YY) width = 2
 (defun log-update (x y container-h updates &key (src-y y) bcol)
     (if updates
         (let* ((act-upd (car updates))
@@ -478,6 +499,7 @@
              (log-update x action-y container-h (cdr updates) :src-y src-y :bcol bcol))
         nil))
 
+; mètode que dibuixa i gestiona el contenidor de les accions dutes a terme
 (defun log-panel (frame-x frame-y frame-w frame-h updates turn)
     (let* ((frame-bord-thck 2)
            (shadow-thck 2)
@@ -513,6 +535,7 @@
                (log-update frame-x frame-y inner-frame-h updates :bcol SOFT-WHITE) ;;(log-update frame-x (+ frame-y frame-h (- frame-bord-thck) (- 5)) update-log)
                ))))
 
+; controla l'actualització de la barra lateral mitjançant el posicionament i crida de tots els panells que el conformen
 (defun status-sidebar-upd (state xi &optional updates)
     (let* ((turn (state-turn state))
            (team (if (oddp turn) TEAM-1 TEAM-2))
@@ -535,6 +558,7 @@
                    (txt-scale 1) (txt-len (get-str-width ver-txt txt-scale)))
                 (draw-str ver-txt (+ xi (round (/ (- sidebar-w txt-len) 2))) 3 txt-scale :tcol SOFT-WHITE)))))
 
+; desencapsula el llistat d'actualizacions per a obtenir les cel·les a repintar en funció de l'acció realitzada
 (defun paint-changes (xi yi cell-size updates)
     (if updates
         (let* ((act-upd (car updates))
@@ -555,7 +579,8 @@
             (paint-changes xi yi cell-size (cdr updates)))
         nil))
 
-; xi, yi, posicionament del tauler; tx,ty numero de columna i fila
+; funció que repinta una cel·La concreta del mapa,
+; xi i yi fan referència al posicionament del mapa a l'interfície; tx i ty número de columna i fila
 (defun repaint-cell (xi yi tx ty cell cell-size)
     (let ((x (+ xi (* tx (- cell-size CELL-BORD-THCK))))
           (y (- yi (* ty (- cell-size CELL-BORD-THCK)))))
@@ -590,6 +615,7 @@
         ))
 
 (defun draw-map (m xi yi row cell-size)
+    "Recorr de forma recursiva el mapa 'm', mou el punter a la posició d'inici de cada fila i crida a la funció de dibuixat"
     (cond ((null m) nil)
           (t (move xi (- yi (* row (- cell-size CELL-BORD-THCK)))) ; Adjusted to avoid double margin in-between cells
              (draw-row (car m) cell-size)
@@ -617,13 +643,14 @@
         (moverel (- CELL-BORD-THCK) (- CELL-BORD-THCK)))
 
 ; TODO: FIX lab painting left offset
+; dibuixa una estructura de tipus laboratori de tamany "cell-size"
 (defun draw-lab (cell cell-size)
         (let* ((lab-t1 (cell-owned-by cell TEAM-1))
                (lab-t2 (cell-owned-by cell TEAM-2)) 
                (NEUTRAL-WHITE '(220 222 221))
                (SHADOW-WHITE  '(176 176 176))
                (SHADOW-RED  (if lab-t1 '(110 110 0) (if lab-t2 '(0 116 117) '(179 34 37))))
-               (NEUTRAL-RED (if lab-t1 '(123 123 0) (if lab-t2 '(0 136 136) '(222 31 33)))) ; Could be RED?
+               (NEUTRAL-RED (if lab-t1 '(123 123 0) (if lab-t2 '(0 136 136) '(222 31 33))))
                (PINKIER-RED (if lab-t1 '(135 135 0) (if lab-t2 '(0 156 156) '(204 56 59))))
                (BRIGHT-RED  (if lab-t1 '(155 155 0) (if lab-t2 '(0 176 177) '(242 61 64))))
                (max-inner-sp (- CELL-MAX-SIZE (* CELL-BORD-THCK 2)))
@@ -689,6 +716,7 @@
             (test-draw-base x y next-row next-col (1+ lower-bound) upper-bound))))
 
 ; TODO: fix small px size ball resizing
+; dibuixa una unitat de tipus bolla de tamany "cell-size"
 (defun draw-ball (cell cell-size)
     (let* ((max-inner-sp (- CELL-MAX-SIZE (* CELL-BORD-THCK 2)))
            (base-size (max 4 (- cell-size (* CELL-BORD-THCK 2))))
@@ -799,7 +827,7 @@
         ;; (moverel 1 0)
         (moverel (- cent-triang-r-x) (- cent-triang-r-y))))
 
-;; Move all file colors to an additional file? (load "colors.lsp")
+; dibuixa una unitat de tipus base de tamany "cell-size"
 (defun draw-base (cell cell-size)
     (let* ((max-inner-sp (- CELL-MAX-SIZE (* CELL-BORD-THCK 2)))
            (base-size (max 4 (- cell-size (* CELL-BORD-THCK 2))))
@@ -810,9 +838,7 @@
            (BASE-COL2 (if base-team1 '(189 189 0)   '(0 188 189)))
            (BASE-COL3 (if base-team1 '(229 229 0)   '(0 228 229)))
            (BASE-COL4 (if base-team1 '(240 240 125) '(124 240 240)))
-           (BASE-COL5 (if base-team1 '(255 255 137) '(136 254 255))) ; Lightest
-           )
-        ;;   (princ (strcat "bs=" base-size)) (terpri) (princ (strcat "g =" g)) (terpri)
+           (BASE-COL5 (if base-team1 '(255 255 137) '(136 254 255)))) ; Lightest
           (if hires-icon
             ; Original Version
             (let ((corn-sm-sq (round (* cell-size 0.1875)))
@@ -872,6 +898,7 @@
                 (fill-rect-rel corn-sq corn-sq)
                 (moverel (- dist-corn-sq) 0)))))
 
+; dibuixa la marca d'aigua representativa del joc LISP Paintball (pura estètica)
 (defun draw-watermark (xi yi container-w container-h scale &optional (b nil))
     (let* ((col    (if b '(220 220 220) '(245 245 245)))
            (col2   (if b '(200 200 200) '(240 240 240)))
@@ -883,8 +910,7 @@
            (line-offsy (round (- (* BITMAP-HEIGHT scale) (+ (* 1.5 scale) -1))))
            (total-h    (+ (* 4 line-offsy) (* BITMAP-HEIGHT scale)))
            (x (+ xi (round (/ (- container-w (get-str-width "LISPLL" scale)) 2))))
-           (y (+ yi (round (/ (- container-h total-h) 2)) (* 4 line-offsy)))
-           )
+           (y (+ yi (round (/ (- container-h total-h) 2)) (* 4 line-offsy))))
         (draw-str "LISP" x y scale :tcol sh-col)
         (draw-str "LISP" (+ x sh-offs0) y scale :tcol col)
         (draw-str "BALL" (+ x ball-offs) (- y line-offsy) scale :tcol sh-col)
